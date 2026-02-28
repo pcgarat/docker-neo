@@ -1,0 +1,9 @@
+# No copiar datos locales ni artefactos al contexto de build
+forge-data
+.git
+.gitignore
+*.md
+docs
+.env
+.env.*
+*.log

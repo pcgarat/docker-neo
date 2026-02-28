@@ -1,0 +1,27 @@
+# sd-webui-forge-neo: WebUI + API en puerto 7860
+# Rutas de volúmenes desde .env; si no existen, se usan /workspace/forge-data y /workspace/forge-extensions.
+# Requiere: Docker con NVIDIA Container Toolkit.
+# Si deploy.reservations no funciona, descomenta en el servicio: runtime: nvidia
+
+services:
+  forge-neo:
+    build: .
+    image: forge-neo:latest
+    container_name: forge-neo
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "7860:7860"
+    volumes:
+      - ${DATA_PATH:-/workspace/forge-data}:/data
+      - ${EXTENSIONS_PATH:-/workspace/forge-extensions}:/data/extensions
+    environment:
+      - COMMANDLINE_ARGS=--listen --port 7860 --data-dir /data --model-ref /data/${MODELS_SUBDIR:-models} --ckpt-dirs /data/${MODELS_SUBDIR:-models}/${CHECKPOINT_SUBDIR:-Stable-diffusion} --text-encoder-dirs /data/${MODELS_SUBDIR:-models}/${TEXT_ENCODER_SUBDIR:-text_encoder} --gradio-allowed-path /app/webui --gradio-allowed-path /data --enable-insecure-extension-access --skip-prepare-environment --skip-install --api --sage ${EXTRA_ARGS}
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

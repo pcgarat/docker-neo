@@ -1,0 +1,30 @@
+# Secretes y configuración local
+.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+*.egg
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs y temporales
+*.log
+tmp/
+temp/
+
+# Volúmenes locales (datos de Forge; no versionar)
+forge-data/
+workspace/
