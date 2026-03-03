@@ -2,11 +2,44 @@
 
 Imagen Docker y Compose para [sd-webui-forge-classic](https://github.com/Haoming02/sd-webui-forge-classic) (rama **neo**), con todas las dependencias opcionales (FFmpeg, xformers, SageAttention, Flash Attention, nunchaku, bitsandbytes, onnxruntime-gpu).
 
-## Requisitos
+La imagen usa **build multi-stage**: se construye con la base CUDA `devel` y la imagen final solo incluye la base **runtime** (más ligera para descargar en RunPod o en cualquier registro).
 
-- Docker con **NVIDIA Container Toolkit** (nvidia-docker2 o nvidia-container-toolkit).
-- GPU NVIDIA con driver compatible con CUDA 13 (cu130).
-- Recomendado: al menos 12–24 GB VRAM para modelos grandes (Flux, etc.).
+## Requisitos del sistema
+
+Para **levantar el contenedor** en el host:
+
+| Requisito | Detalle |
+|-----------|---------|
+| **Docker** | Docker Engine (o Docker Desktop) instalado. En Ubuntu/Debian: `make install-docker` (instala Engine + Docker Compose plugin desde el repo oficial). |
+| **NVIDIA Container Toolkit** | Para exponer la GPU al contenedor (`nvidia-docker2` o `nvidia-container-toolkit`). Tras instalarlo, reiniciar Docker y comprobar con `docker run --rm --gpus all nvidia/cuda:13.0.2-base-ubuntu24.04 nvidia-smi`. |
+| **Driver NVIDIA** | Versión del driver que soporte **CUDA 13** (imagen final: `nvidia/cuda:13.0.2-runtime-ubuntu24.04`). Consulta [NVIDIA CUDA Compatibility](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html). |
+| **GPU NVIDIA** | Obligatoria para uso real; sin GPU solo CPU (muy lento). |
+| **VRAM** | Recomendado **≥ 12 GB** para modelos medianos/grandes (Flux, Klein 9B). **≥ 20 GB** para highvram sin tantos ajustes. Con **&lt; 12 GB** se usa lowvram + fp8 (ver `make klein9b`). |
+| **Disco** | Espacio para: imagen Docker (varios GB), volumen de datos (modelos, output, extensiones). |
+| **Memoria RAM** | Depende del modelo; 16 GB de RAM de sistema es un mínimo razonable además de la VRAM. |
+
+Resumen mínimo: **Docker + NVIDIA Container Toolkit + GPU NVIDIA con driver CUDA 13**.
+
+### Instalación de Docker (solo en host propio, no en RunPod)
+
+**En RunPod no hace falta:** RunPod no permite Docker ni Docker Compose dentro del Pod ([docs](https://docs.runpod.io/pods/overview)). El Pod ya es el contenedor; se usa esta imagen como imagen del Pod. Ver [Despliegue en RunPod](#despliegue-en-runpod) más abajo.
+
+En un host **Ubuntu/Debian** (máquina local, VPS, etc.):
+
+```bash
+make install-docker
+```
+
+Instala Docker Engine, Docker Compose (plugin v2), containerd y Buildx desde el [repo oficial](https://docs.docker.com/engine/install/ubuntu/). Requiere `sudo`. Por defecto usa la **última versión estable** del repo. Para fijar versiones:
+
+```bash
+# Listar versiones disponibles y fijar Docker Engine (ej. Ubuntu 24.04 noble)
+apt list -a docker-ce
+make install-docker DOCKER_CE_VERSION=5:29.2.1-1~ubuntu.24.04~noble
+
+# Fijar solo el plugin Docker Compose
+make install-docker DOCKER_COMPOSE_PLUGIN_VERSION=2.24.0-1~ubuntu.24.04~noble
+```
 
 ## Uso rápido
 
@@ -97,7 +130,60 @@ Estructura bajo `/data`: `models/`, `output/`, `config.json`, `ui-config.json`; 
 ## Variables de entorno
 
 - **`COMMANDLINE_ARGS`** — ya definido en el compose; puedes extenderlo (p. ej. `--gradio-auth user:pass`).
+- **`EXTRA_ARGS`** — argumentos que el entrypoint añade al arranque (p. ej. `--cuda-malloc --normalvram --bf16-unet`). Útil en RunPod para ajustar VRAM sin cambiar el start command.
 - **`NVIDIA_VISIBLE_DEVICES`** — por defecto `all`; pon IDs de GPU si quieres limitar.
+
+## Despliegue en RunPod
+
+En RunPod **no se usa Docker ni Docker Compose dentro del Pod**: el Pod es el contenedor. Hay que usar la imagen de este proyecto como imagen del Pod ([Limitaciones RunPod](https://docs.runpod.io/pods/overview#limitations)).
+
+### Pasos
+
+1. **Construir y publicar la imagen** en un registro (Docker Hub, GHCR, etc.):
+   ```bash
+   make push
+   ```
+   Por defecto sube a **ghcr.io/pcgarat/forge-neo:latest**. Para otro registro: `make push REGISTRY_IMAGE=tu-usuario/forge-neo:latest` (Docker Hub) o `make push REGISTRY_IMAGE=ghcr.io/tu-usuario/forge-neo:latest`.
+
+   **Si RunPod falla con `unsatisfied condition: cuda>=13.0`** (driver del host no soporta CUDA 13), usa la variante **CUDA 12.4**:
+   ```bash
+   make push-cuda12
+   ```
+   Luego en RunPod elige como imagen **ghcr.io/pcgarat/forge-neo:cuda12** (o la URL que hayas usado para `REGISTRY_IMAGE_CUDA12`).
+
+   **Login:** antes del primer push inicia sesión en el registro:
+   - **GitHub Container Registry:** `docker login ghcr.io -u TU_GITHUB_USER` (contraseña = Personal Access Token con `write:packages`).
+   - **Docker Hub:** `docker login` (usuario y contraseña o token).
+   Si construyes en **Mac (Apple Silicon)** usa `--platform linux/amd64` (RunPod solo soporta amd64):
+   ```bash
+   docker build --platform linux/amd64 -t tu-usuario/forge-neo:latest .
+   ```
+
+2. **Crear el Pod** en [RunPod Console](https://console.runpod.io/pod/create):
+   - **Container Image:** la URL de tu imagen (ej. `tu-usuario/forge-neo:latest`).
+   - **GPU:** la que necesites (≥ 12 GB VRAM recomendado para Flux/Klein).
+   - **Volume Disk:** persistente; se monta en **`/workspace`** por defecto.
+   - **Expose HTTP Ports:** `7860` (WebUI y API).
+   - **Variables de entorno:** `DATA_DIR=/workspace` para que Forge use el volumen persistente (modelos, output, extensiones). Opcional: `EXTRA_ARGS="--cuda-malloc --normalvram --bf16-unet"` (o `--lowvram`, `--highvram`, etc.) para ajustar memoria/backend al arrancar.
+
+3. **Arrancar y acceder:** Tras desplegar, la WebUI queda en:
+   `https://[pod-id]-7860.proxy.runpod.net`
+
+Los modelos y la configuración van en `/workspace` dentro del Pod (persisten al parar/reiniciar el Pod; se pierden si borras el Pod salvo que uses Network Volume en `/workspace`).
+
+### Resumen RunPod
+
+| Concepto | En RunPod |
+|----------|-----------|
+| Docker / Compose | No se instalan ni usan dentro del Pod. |
+| Imagen | Esta imagen es la imagen del Pod. |
+| Datos persistentes | Volume disk en `/workspace`; definir `DATA_DIR=/workspace`. |
+| Argumentos extra | `EXTRA_ARGS="--cuda-malloc --normalvram"` (o los que necesites) para que el Pod arranque con esos flags. |
+| Puerto | Exponer **7860**; acceso vía proxy RunPod. |
+
+**Si el Pod falla con `JSONDecodeError` en `verify_version`:** suele deberse a un `config.json` o `ui-config.json` vacío en `/workspace`. La imagen actual corrige esto en el entrypoint (escribe `{}` si el fichero existe pero está vacío). Reconstruye y vuelve a subir la imagen si usas una versión anterior.
+
+**Si el Pod falla con `cuda>=13.0, please update your driver`:** el nodo de RunPod tiene un driver que no soporta CUDA 13. Usa la imagen **CUDA 12** (`make push-cuda12` y en RunPod selecciona la imagen con tag `:cuda12`).
 
 ## Planteamiento detallado
 

@@ -1,10 +1,10 @@
-# sd-webui-forge-neo: imagen ligera con multi-stage (builder + runtime)
-# Base build: CUDA devel. Imagen final: CUDA runtime (mucho más pequeña para pull en RunPod).
+# Variante CUDA 12.4 para RunPod (y hosts) con driver que no soporta CUDA 13.
+# Uso: docker build -f Dockerfile.cuda12 -t forge-neo:cuda12 .  o  make build-cuda12
 
 # -----------------------------------------------------------------------------
-# Stage 1: builder — compila e instala todo (necesita devel por compilación)
+# Stage 1: builder (CUDA 12.4 devel)
 # -----------------------------------------------------------------------------
-FROM nvidia/cuda:13.0.2-devel-ubuntu24.04 AS builder
+FROM nvidia/cuda:12.4.0-devel-ubuntu24.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
@@ -31,11 +31,12 @@ RUN git clone --depth 1 --branch neo https://github.com/Haoming02/sd-webui-forge
 
 WORKDIR /app/webui
 ENV COMMANDLINE_ARGS="--exit --skip-torch-cuda-test --xformers --sage --flash --nunchaku --bnb --onnxruntime-gpu"
+ENV TORCH_INDEX_URL=https://download.pytorch.org/whl/cu124
+ENV TORCH_COMMAND=pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
 RUN python launch.py
 
 RUN python -m pip install --no-cache-dir python-dotenv pillow-avif-plugin imageio_ffmpeg
 
-# Reducir tamaño: quitar cachés y tests (site-packages y/o dist-packages)
 RUN find /usr/local/lib/python3.13 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -name '*.pyc' -delete 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -type d -name tests -exec rm -rf {} + 2>/dev/null || true \
@@ -44,9 +45,9 @@ RUN find /usr/local/lib/python3.13 -type d -name __pycache__ -exec rm -rf {} + 2
     && find /app/webui -name '*.pyc' -delete 2>/dev/null || true
 
 # -----------------------------------------------------------------------------
-# Stage 2: runtime — solo librerías CUDA runtime + Python + artefactos
+# Stage 2: runtime (CUDA 12.4 runtime)
 # -----------------------------------------------------------------------------
-FROM nvidia/cuda:13.0.2-runtime-ubuntu24.04 AS runtime
+FROM nvidia/cuda:12.4.0-runtime-ubuntu24.04 AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
