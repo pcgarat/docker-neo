@@ -164,7 +164,7 @@ En RunPod **no se usa Docker ni Docker Compose dentro del Pod**: el Pod es el co
    - **GPU:** la que necesites (≥ 12 GB VRAM recomendado para Flux/Klein).
    - **Volume Disk:** persistente; se monta en **`/workspace`** por defecto.
    - **Expose HTTP Ports:** `7860` (WebUI y API).
-   - **Variables de entorno:** `DATA_DIR=/workspace` para que Forge use el volumen persistente (modelos, output, extensiones). Opcional: `EXTRA_ARGS="--cuda-malloc --normalvram --bf16-unet"` (o `--lowvram`, `--highvram`, etc.) para ajustar memoria/backend al arrancar.
+   - **Variables de entorno:** si no defines `DATA_DIR`, el entrypoint usa **`/workspace`** (donde RunPod monta el volume disk). Opcional: `DATA_DIR=/workspace` para dejarlo explícito. Opcional: `EXTRA_ARGS="--cuda-malloc --normalvram --bf16-unet"` para memoria/backend.
 
 3. **Arrancar y acceder:** Tras desplegar, la WebUI queda en:
    `https://[pod-id]-7860.proxy.runpod.net`
@@ -177,7 +177,7 @@ Los modelos y la configuración van en `/workspace` dentro del Pod (persisten al
 |----------|-----------|
 | Docker / Compose | No se instalan ni usan dentro del Pod. |
 | Imagen | Esta imagen es la imagen del Pod. |
-| Datos persistentes | Volume disk en `/workspace`; definir `DATA_DIR=/workspace`. |
+| Datos persistentes | Volume disk en `/workspace`; por defecto el entrypoint usa `/workspace` si no se define `DATA_DIR`. |
 | Argumentos extra | `EXTRA_ARGS="--cuda-malloc --normalvram"` (o los que necesites) para que el Pod arranque con esos flags. |
 | Puerto | Exponer **7860**; acceso vía proxy RunPod. |
 
