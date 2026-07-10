@@ -30,16 +30,26 @@ RUN git clone --depth 1 --branch neo https://github.com/Haoming02/sd-webui-forge
     && cd webui && rm -rf .git
 
 WORKDIR /app/webui
-ENV COMMANDLINE_ARGS="--exit --skip-torch-cuda-test --xformers --sage --flash --nunchaku --bnb --onnxruntime-gpu"
-RUN python launch.py
+# BUILD_SLIM=1: sin onnxruntime-gpu ni nunchaku (reduce mucho tamaño para RunPod)
+ARG BUILD_SLIM=0
+RUN if [ "$BUILD_SLIM" = "1" ]; then \
+      export COMMANDLINE_ARGS="--exit --skip-torch-cuda-test --xformers --sage --flash --bnb"; \
+    else \
+      export COMMANDLINE_ARGS="--exit --skip-torch-cuda-test --xformers --sage --flash --nunchaku --bnb --onnxruntime-gpu"; \
+    fi && python launch.py
 
 RUN python -m pip install --no-cache-dir python-dotenv pillow-avif-plugin imageio_ffmpeg
 
-# Reducir tamaño: quitar cachés y tests (site-packages y/o dist-packages)
+# Limpieza agresiva para reducir tamaño (RunPod tiene límite de disco para la imagen)
 RUN find /usr/local/lib/python3.13 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -name '*.pyc' -delete 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -type d -name tests -exec rm -rf {} + 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -type d -name 'test' -exec rm -rf {} + 2>/dev/null || true \
+    && find /usr/local/lib/python3.13 -type d -name 'docs' -exec rm -rf {} + 2>/dev/null || true \
+    && find /usr/local/lib/python3.13 -type d -name 'doc' -exec rm -rf {} + 2>/dev/null || true \
+    && find /usr/local/lib/python3.13 -name '*.a' -delete 2>/dev/null || true \
+    && find /usr/local/lib/python3.13 -name '*.so' -exec strip --strip-unneeded {} \; 2>/dev/null || true \
+    && rm -rf /usr/local/lib/python3.13/site-packages/torch/share 2>/dev/null || true \
     && find /app/webui -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true \
     && find /app/webui -name '*.pyc' -delete 2>/dev/null || true
 
@@ -75,6 +85,7 @@ EXPOSE 7860
 VOLUME ["/data"]
 
 COPY entrypoint.sh /entrypoint.sh
+COPY ensure_config_then_launch.py /app/webui/ensure_config_then_launch.py
 RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["python", "launch.py"]
+CMD ["python", "ensure_config_then_launch.py"]

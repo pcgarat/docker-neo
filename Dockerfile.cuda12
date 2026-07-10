@@ -38,9 +38,14 @@ RUN python launch.py
 RUN python -m pip install --no-cache-dir python-dotenv pillow-avif-plugin imageio_ffmpeg
 
 RUN find /usr/local/lib/python3.13 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true \
-    && find /usr/local/lib/python3.13 -name '*.pyc' -delete 2>/dev/null || true \
+    && find /usr/local/lib/python3.13 -type d -name 'docs' -exec rm -rf {} + 2>/dev/null || true \
+    && find /usr/local/lib/python3.13 -type d -name 'doc' -exec rm -rf {} + 2>/dev/null || true \
+    && find /usr/local/lib/python3.13 -name '*.a' -delete 2>/dev/null || true \
+    && find /usr/local/lib/python3.13 -name '*.so' -exec strip --strip-unneeded {} \; 2>/dev/null || true \
+    && rm -rf /usr/local/lib/python3.13/site-packages/torch/share 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -type d -name tests -exec rm -rf {} + 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -type d -name 'test' -exec rm -rf {} + 2>/dev/null || true \
+    && find /usr/local/lib/python3.13 -name '*.pyc' -delete 2>/dev/null || true \
     && find /app/webui -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true \
     && find /app/webui -name '*.pyc' -delete 2>/dev/null || true
 
@@ -76,6 +81,7 @@ EXPOSE 7860
 VOLUME ["/data"]
 
 COPY entrypoint.sh /entrypoint.sh
+COPY ensure_config_then_launch.py /app/webui/ensure_config_then_launch.py
 RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["python", "launch.py"]
+CMD ["python", "ensure_config_then_launch.py"]

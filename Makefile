@@ -15,7 +15,7 @@ REGISTRY_IMAGE ?= ghcr.io/$(GITHUB_USER)/forge-neo:latest
 REGISTRY_IMAGE_CUDA12 ?= ghcr.io/$(GITHUB_USER)/forge-neo:cuda12
 GITHUB_USER ?= pcgarat
 
-.PHONY: help build build-no-cache build-cuda12 push push-cuda12 up down restart logs shell workspace ps clean klein9b iib-access install-docker
+.PHONY: help build build-no-cache build-cuda12 build-slim push push-cuda12 push-slim up down restart logs shell workspace ps clean klein9b iib-access install-docker
 
 help:
 	@echo "sd-webui-forge-neo — objetivos disponibles:"
@@ -36,6 +36,8 @@ help:
 	@echo "  make push           — Construir imagen, etiquetar y subir a registro (REGISTRY_IMAGE)"
 	@echo "  make build-cuda12   — Construir variante CUDA 12.4 (para RunPod con driver < CUDA 13)"
 	@echo "  make push-cuda12   — Construir variante CUDA 12, etiquetar y subir (REGISTRY_IMAGE_CUDA12)"
+	@echo "  make build-slim    — Construir variante slim (sin onnxruntime-gpu/nunchaku, menos tamaño para RunPod)"
+	@echo "  make push-slim     — Construir slim, etiquetar y subir (REGISTRY_IMAGE, tag :slim)"
 	@echo ""
 	@echo "WebUI: http://localhost:$(PORT)   API: http://localhost:$(PORT)/docs"
 
@@ -52,6 +54,10 @@ build-no-cache:
 # Variante CUDA 12.4: para RunPod (u otros hosts) donde el driver no soporta CUDA 13
 build-cuda12:
 	docker build -f Dockerfile.cuda12 -t forge-neo:cuda12 .
+
+# Variante slim: sin onnxruntime-gpu ni nunchaku, menos tamaño (para no exceder límite RunPod)
+build-slim:
+	docker build --build-arg BUILD_SLIM=1 -t forge-neo:slim .
 
 up: workspace
 	@$(ENV_LOAD) && $(COMPOSE) up -d
@@ -117,6 +123,12 @@ push: build
 push-cuda12: build-cuda12
 	docker tag forge-neo:cuda12 $(REGISTRY_IMAGE_CUDA12)
 	docker push $(REGISTRY_IMAGE_CUDA12)
+
+# Variante slim: subir como :slim (para RunPod cuando la imagen completa excede el límite)
+push-slim: build-slim
+	$(eval slim_image := $(patsubst %:latest,%:slim,$(REGISTRY_IMAGE)))
+	docker tag forge-neo:slim $(slim_image)
+	docker push $(slim_image)
 
 # Instala Docker Engine y Docker Compose (plugin) desde el repo oficial. Solo Ubuntu/Debian.
 # Usa la última versión estable del repo; para fijar: make install-docker DOCKER_CE_VERSION=5:29.2.1-1~ubuntu.24.04~noble

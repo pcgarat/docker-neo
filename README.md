@@ -151,6 +151,12 @@ En RunPod **no se usa Docker ni Docker Compose dentro del Pod**: el Pod es el co
    ```
    Luego en RunPod elige como imagen **ghcr.io/pcgarat/forge-neo:cuda12** (o la URL que hayas usado para `REGISTRY_IMAGE_CUDA12`).
 
+   **Si la imagen excede el límite de tamaño de RunPod**, usa la variante **slim** (sin onnxruntime-gpu ni nunchaku; suficiente para la mayoría de usos):
+   ```bash
+   make push-slim
+   ```
+   En RunPod usa la imagen con tag **:slim** (ej. `ghcr.io/pcgarat/forge-neo:slim`).
+
    **Login:** antes del primer push inicia sesión en el registro:
    - **GitHub Container Registry:** `docker login ghcr.io -u TU_GITHUB_USER` (contraseña = Personal Access Token con `write:packages`).
    - **Docker Hub:** `docker login` (usuario y contraseña o token).
@@ -184,6 +190,8 @@ Los modelos y la configuración van en `/workspace` dentro del Pod (persisten al
 **Si el Pod falla con `JSONDecodeError` en `verify_version`:** suele deberse a un `config.json` o `ui-config.json` vacío en `/workspace`. La imagen actual corrige esto en el entrypoint (escribe `{}` si el fichero existe pero está vacío). Reconstruye y vuelve a subir la imagen si usas una versión anterior.
 
 **Si el Pod falla con `cuda>=13.0, please update your driver`:** el nodo de RunPod tiene un driver que no soporta CUDA 13. Usa la imagen **CUDA 12** (`make push-cuda12` y en RunPod selecciona la imagen con tag `:cuda12`).
+
+**Si la imagen excede el límite de disco de RunPod:** usa la variante **slim** (`make build-slim` y `make push-slim`; en RunPod imagen con tag `:slim`). Omite onnxruntime-gpu y nunchaku y reduce bastante el tamaño.
 
 ## Planteamiento detallado
 
