@@ -81,8 +81,8 @@ klein9b: workspace
 	  echo "VRAM $$v MB: usando --normalvram --bf16-unet para Klein 9B"; \
 	  extra="--cuda-malloc --normalvram --bf16-unet"; \
 	else \
-	  echo "VRAM $$v MB: usando --lowvram --fp8_e4m3fn-unet para Klein 9B"; \
-	  extra="--cuda-malloc --lowvram --fp8_e4m3fn-unet"; \
+	  echo "VRAM $$v MB: usando --lowvram --fp8_e4m3fn-unet --reserve-vram 2 --disable-sage para Klein 9B"; \
+	  extra="--cuda-malloc --lowvram --fp8_e4m3fn-unet --reserve-vram 2 --disable-sage"; \
 	fi; \
 	$(ENV_LOAD) && export EXTRA_ARGS="$$extra" && $(COMPOSE) up -d
 

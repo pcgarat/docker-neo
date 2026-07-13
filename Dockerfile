@@ -38,7 +38,7 @@ RUN if [ "$BUILD_SLIM" = "1" ]; then \
       export COMMANDLINE_ARGS="--exit --skip-torch-cuda-test --xformers --sage --flash --nunchaku --bnb --onnxruntime-gpu"; \
     fi && python launch.py
 
-RUN python -m pip install --no-cache-dir python-dotenv pillow-avif-plugin imageio_ffmpeg
+RUN python -m pip install --no-cache-dir python-dotenv pillow-avif-plugin imageio_ffmpeg hnswlib
 
 # Limpieza agresiva para reducir tamaño (RunPod tiene límite de disco para la imagen)
 RUN find /usr/local/lib/python3.13 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true \
@@ -64,6 +64,7 @@ ENV PYTHONUNBUFFERED=1
 RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
     ffmpeg \
+    git \
     && add-apt-repository -y ppa:deadsnakes/ppa \
     && apt-get update \
     && apt-get install -y --no-install-recommends \

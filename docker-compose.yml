@@ -17,7 +17,7 @@ services:
       - ${EXTENSIONS_PATH:-/workspace/forge-extensions}:/data/extensions
     environment:
       - DATA_DIR=/data
-      - COMMANDLINE_ARGS=--listen --port 7860 --data-dir /data --model-ref /data/${MODELS_SUBDIR:-models} --ckpt-dirs /data/${MODELS_SUBDIR:-models}/${CHECKPOINT_SUBDIR:-Stable-diffusion} --text-encoder-dirs /data/${MODELS_SUBDIR:-models}/${TEXT_ENCODER_SUBDIR:-text_encoder} --gradio-allowed-path /app/webui --gradio-allowed-path /data --enable-insecure-extension-access --skip-prepare-environment --skip-install --api --sage ${EXTRA_ARGS}
+      - COMMANDLINE_ARGS=--listen --port 7860 --data-dir /data --model-ref /data/${MODELS_SUBDIR:-models} --ckpt-dirs /data/${MODELS_SUBDIR:-models}/${CHECKPOINT_SUBDIR:-Stable-diffusion} --text-encoder-dirs /data/${MODELS_SUBDIR:-models}/${TEXT_ENCODER_SUBDIR:-text_encoder} --gradio-allowed-path /app/webui --gradio-allowed-path /data --enable-insecure-extension-access --skip-prepare-environment --skip-install --api --sage
       - NVIDIA_VISIBLE_DEVICES=all
     deploy:
       resources:
