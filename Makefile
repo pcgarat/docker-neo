@@ -15,17 +15,22 @@ REGISTRY_IMAGE ?= ghcr.io/$(GITHUB_USER)/forge-neo:latest
 REGISTRY_IMAGE_CUDA12 ?= ghcr.io/$(GITHUB_USER)/forge-neo:cuda12
 GITHUB_USER ?= pcgarat
 
-.PHONY: help build build-no-cache build-cuda12 build-slim push push-cuda12 push-slim up down restart logs shell workspace ps clean klein9b iib-access install-docker
+# Perfil GPU ≤12 GB (p. ej. RTX 4060 8 GB): Klein 9B, Flux, Qwen y modelos grandes.
+# cuda-malloc + lowvram + fp8 + offload RAM + Flash (sin Sage en fp8).
+ARGS_8GB = --cuda-malloc --lowvram --fp8_e4m3fn-unet --reserve-vram 2 --disable-sage --pin-shared-memory --mmap-torch-files --fast-fp8
+
+.PHONY: help build build-no-cache build-cuda12 build-slim push push-cuda12 push-slim up down restart logs shell workspace ps clean klein9b lowvram iib-access install-docker
 
 help:
 	@echo "sd-webui-forge-neo — objetivos disponibles:"
 	@echo ""
 	@echo "  make build         — Construir la imagen (primera vez o tras cambios)"
 	@echo "  make build-no-cache — Reconstruir sin caché (entrypoint, fixes config.json, etc.)"
-	@echo "  make up            — Arrancar el contenedor en segundo plano"
+	@echo "  make up            — Arrancar el contenedor y seguir logs (Ctrl+C para salir)"
 	@echo "  make down          — Parar y eliminar el contenedor"
-	@echo "  make restart       — down + up (recrea el contenedor y recoge cambios de .env)"
-	@echo "  make klein9b       — Arrancar optimizado para Flux 2 Klein 9B (detecta VRAM y aplica --fp8/--bf16, --highvram/--normalvram/--lowvram)"
+	@echo "  make restart       — down + up y seguir logs (Ctrl+C para salir)"
+	@echo "  make klein9b       — Arrancar optimizado para Klein 9B y seguir logs (Ctrl+C para salir)"
+	@echo "  make lowvram       — Arrancar con perfil 8 GB y seguir logs (Ctrl+C para salir)"
 	@echo "  make logs          — Ver logs del servicio (Ctrl+C para salir)"
 	@echo "  make shell         — Abrir una shell dentro del contenedor"
 	@echo "  make workspace     — Crear /workspace/forge-data y /workspace/forge-extensions (antes del primer up)"
@@ -60,31 +65,35 @@ build-slim:
 	docker build --build-arg BUILD_SLIM=1 -t forge-neo:slim .
 
 up: workspace
-	@$(ENV_LOAD) && $(COMPOSE) up -d
+	@$(ENV_LOAD) && $(COMPOSE) up -d && $(MAKE) logs
 
 down:
 	$(COMPOSE) down
 
-restart: down
-	@$(ENV_LOAD) && $(COMPOSE) up -d
+restart: down up
 
-# Flux 2 Klein 9B: según VRAM de la GPU se añaden --fp8_e4m3fn-unet/--bf16-unet y --lowvram/--normalvram/--highvram
+# Flux 2 Klein 9B: según VRAM se aplican flags de memoria y precisión
 klein9b: workspace
 	@v=$$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1); \
 	if [ -z "$$v" ]; then \
-	  echo "No se detectó nvidia-smi; usando --cuda-malloc --normalvram --bf16-unet"; \
-	  extra="--cuda-malloc --normalvram --bf16-unet"; \
+	  echo "No se detectó nvidia-smi; usando perfil 8GB"; \
+	  extra="$(ARGS_8GB)"; \
 	elif [ "$$v" -ge 20000 ]; then \
-	  echo "VRAM $$v MB: usando --highvram --bf16-unet para Klein 9B"; \
-	  extra="--cuda-malloc --highvram --bf16-unet"; \
+	  echo "VRAM $$v MB: --highvram --bf16-unet"; \
+	  extra="--cuda-malloc --highvram --bf16-unet --pin-shared-memory --mmap-torch-files"; \
 	elif [ "$$v" -ge 12000 ]; then \
-	  echo "VRAM $$v MB: usando --normalvram --bf16-unet para Klein 9B"; \
-	  extra="--cuda-malloc --normalvram --bf16-unet"; \
+	  echo "VRAM $$v MB: --normalvram --bf16-unet"; \
+	  extra="--cuda-malloc --normalvram --bf16-unet --pin-shared-memory --mmap-torch-files"; \
 	else \
-	  echo "VRAM $$v MB: usando --lowvram --fp8_e4m3fn-unet --reserve-vram 2 --disable-sage para Klein 9B"; \
-	  extra="--cuda-malloc --lowvram --fp8_e4m3fn-unet --reserve-vram 2 --disable-sage"; \
+	  echo "VRAM $$v MB: perfil 8GB ($(ARGS_8GB))"; \
+	  extra="$(ARGS_8GB)"; \
 	fi; \
-	$(ENV_LOAD) && export EXTRA_ARGS="$$extra" && $(COMPOSE) up -d
+	$(ENV_LOAD) && export EXTRA_ARGS="$$extra" && $(COMPOSE) up -d && $(MAKE) logs
+
+# Perfil fijo 8 GB (sin autodetección); útil para RTX 4060 / 3060 12GB límite, etc.
+lowvram: workspace
+	@echo "Perfil 8GB: $(ARGS_8GB)"
+	@$(ENV_LOAD) && export EXTRA_ARGS="$(ARGS_8GB)" && $(COMPOSE) up -d && $(MAKE) logs
 
 logs:
 	$(COMPOSE) logs -f $(SERVICE)
