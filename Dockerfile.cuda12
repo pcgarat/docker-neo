@@ -25,9 +25,18 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.13 1
     && update-alternatives --install /usr/bin/python python /usr/bin/python3.13 1
 RUN python3.13 -m ensurepip --upgrade
 
+# Pin de Forge Neo compatible con patches/krea2-features-backend.patch (ver patches/README.md).
+ARG FORGE_NEO_REF=97ff3a4024be2f0d5316f16e868e5ef822768872
 WORKDIR /app
-RUN git clone --depth 1 --branch neo https://github.com/Haoming02/sd-webui-forge-classic webui \
-    && cd webui && rm -rf .git
+COPY patches/krea2-features-backend.patch patches/qwen35-vision-attention-fix.patch /tmp/
+RUN git clone --filter=blob:none --no-checkout https://github.com/Haoming02/sd-webui-forge-classic webui \
+    && cd webui \
+    && git fetch --depth 1 origin "${FORGE_NEO_REF}" \
+    && git checkout FETCH_HEAD \
+    && git apply --verbose /tmp/krea2-features-backend.patch \
+    && git apply --verbose /tmp/qwen35-vision-attention-fix.patch \
+    && rm -f /tmp/krea2-features-backend.patch /tmp/qwen35-vision-attention-fix.patch \
+    && rm -rf .git
 
 WORKDIR /app/webui
 ENV COMMANDLINE_ARGS="--exit --skip-torch-cuda-test --xformers --sage --flash --nunchaku --bnb --onnxruntime-gpu"

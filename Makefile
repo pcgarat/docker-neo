@@ -16,10 +16,10 @@ REGISTRY_IMAGE_CUDA12 ?= ghcr.io/$(GITHUB_USER)/forge-neo:cuda12
 GITHUB_USER ?= pcgarat
 
 # Perfil GPU ≤12 GB (p. ej. RTX 4060 8 GB): Klein 9B, Flux, Qwen y modelos grandes.
-# cuda-malloc + lowvram + fp8 + offload RAM + Flash (sin Sage en fp8).
-ARGS_8GB = --cuda-malloc --lowvram --fp8_e4m3fn-unet --reserve-vram 2 --disable-sage --pin-shared-memory --mmap-torch-files --fast-fp8
+# cuda-malloc + lowvram + fp8 + offload RAM. Sin Sage. Sin --fast-fp8 (falla en Krea2 y solo ralentiza).
+ARGS_8GB = --cuda-malloc --lowvram --fp8_e4m3fn-unet --reserve-vram 2 --disable-sage --pin-shared-memory --mmap-torch-files
 
-.PHONY: help build build-no-cache build-cuda12 build-slim push push-cuda12 push-slim up down restart logs shell workspace ps clean klein9b lowvram iib-access install-docker
+.PHONY: help build build-no-cache build-cuda12 build-slim push push-cuda12 push-slim up down restart logs shell workspace ps clean klein9b lowvram iib-access krea2-ext install-docker
 
 help:
 	@echo "sd-webui-forge-neo — objetivos disponibles:"
@@ -35,6 +35,7 @@ help:
 	@echo "  make shell         — Abrir una shell dentro del contenedor"
 	@echo "  make workspace     — Crear /workspace/forge-data y /workspace/forge-extensions (antes del primer up)"
 	@echo "  make iib-access   — Crear .env en la extensión IIB con acceso a carpetas de salida (/data/output, /data/Images)"
+	@echo "  make krea2-ext    — Instalar/actualizar extensiones Krea2 Moodboard + Identity Edit en EXTENSIONS_PATH"
 	@echo "  make ps            — Estado del servicio"
 	@echo "  make clean         — down y eliminar imagen local"
 	@echo "  make install-docker — Instalar Docker Engine y Docker Compose (plugin) desde repo oficial (Ubuntu/Debian, requiere sudo)"
@@ -116,6 +117,30 @@ iib-access:
 	fi; \
 	printf '%s\n%s\n' 'IIB_ACCESS_CONTROL=enable' 'IIB_ACCESS_CONTROL_ALLOWED_PATHS=txt2img,img2img,extra,save,/data/output,/data/Images' > "$$ext_dir/.env"; \
 	echo "Creado $$ext_dir/.env con acceso a carpetas de salida. Reinicia la WebUI o recarga la extensión.";
+
+# Instala/actualiza las extensiones UI de Krea2 Moodboard + Identity Edit en EXTENSIONS_PATH.
+# El backend patch ya va en la imagen (Dockerfile). Modelos/LoRA/TE van en DATA_PATH (manual).
+# Docs: docs/integracion-krea2-moodboard-identity-edit-forge-neo_23-07-2026.md
+# Nota: git fetch por SHA corto falla en GitHub; usar SHA completo o rama (main).
+KREA2_TOOLKIT_REF ?= 8aac7a745202ae2eecdf4435b1a85fb5466ee51c
+krea2-ext:
+	@$(ENV_LOAD); \
+	ext_root="$${EXTENSIONS_PATH:-/workspace/forge-extensions}"; \
+	mkdir -p "$$ext_root"; \
+	tmp=$$(mktemp -d); \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	echo "Clonando forge-neo-krea2-toolkit @ $(KREA2_TOOLKIT_REF)…"; \
+	git clone --filter=blob:none --no-checkout https://github.com/RedNodeAI/forge-neo-krea2-toolkit "$$tmp/toolkit" \
+	  && git -C "$$tmp/toolkit" fetch --depth 1 origin "$(KREA2_TOOLKIT_REF)" \
+	  && git -C "$$tmp/toolkit" checkout FETCH_HEAD \
+	  && rm -rf "$$ext_root/sd-forge-krea2-moodboard" "$$ext_root/sd-forge-krea2-edit" \
+	  && cp -a "$$tmp/toolkit/extensions/sd-forge-krea2-moodboard" "$$ext_root/" \
+	  && cp -a "$$tmp/toolkit/extensions/sd-forge-krea2-edit" "$$ext_root/" \
+	  && python3 -c "from pathlib import Path; p=Path('$$ext_root')/'sd-forge-krea2-edit/scripts/krea2_edit.py'; s=p.read_text(); s2=s.replace('dynamic_args.pop(\"ref_boosts\", None)','dynamic_args[\"ref_boosts\"] = []').replace('dynamic_args.pop(\"ref_fit\", None)','dynamic_args[\"ref_fit\"] = []'); assert s2!=s, 'no se encontró dynamic_args.pop en krea2_edit.py'; p.write_text(s2)" \
+	  && echo "Instaladas en $$ext_root:" \
+	  && echo "  - sd-forge-krea2-moodboard" \
+	  && echo "  - sd-forge-krea2-edit (fix dynamic_args.pop aplicado)" \
+	  && echo "Reinicia la WebUI (make restart). Requiere imagen con el backend patch (make build)."
 
 ps:
 	$(COMPOSE) ps

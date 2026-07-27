@@ -73,6 +73,28 @@ make iib-access
 
 Eso escribe en `<EXTENSIONS_PATH>/sd-webui-infinite-image-browsing/.env` las rutas permitidas: `txt2img`, `img2img`, `extra`, `save`, `/data/output`, `/data/Images`. Luego reinicia la WebUI o recarga la extensión.
 
+### Krea 2 Moodboard + Identity Edit
+
+La imagen incluye el **backend patch** de [forge-neo-krea2-toolkit](https://github.com/RedNodeAI/forge-neo-krea2-toolkit) (Forge Neo pin + patch regenerado; ver `patches/README.md`). Las extensiones UI van en el volumen de extensiones:
+
+```bash
+make build      # imagen con el patch (obligatorio la primera vez / tras cambiar el patch)
+make krea2-ext  # copia Moodboard + Identity Edit a EXTENSIONS_PATH
+make restart
+```
+
+Modelos (en `DATA_PATH`, no van en la imagen):
+
+| Asset | Carpeta |
+|-------|---------|
+| Checkpoint Krea 2 | `models/Stable-diffusion/` |
+| Text encoder visión `qwen3vl_4b_bf16` (o `fp8_scaled`) | `models/text_encoder/` — [Comfy-Org/Krea-2](https://huggingface.co/Comfy-Org/Krea-2) |
+| LoRA identity edit (solo Identity Edit, strength 1.0) | `models/Lora/` — [Civitai](https://civitai.com/models/2761113) |
+
+En la WebUI: accordions **Krea2 Moodboard** / **Krea2 Identity Edit**; Settings → Krea2 Moodboard. Guía completa: [docs/integracion-krea2-moodboard-identity-edit-forge-neo_23-07-2026.md](docs/integracion-krea2-moodboard-identity-edit-forge-neo_23-07-2026.md).
+
+**VRAM:** el TE visión + K2 es pesado; no asumas que el perfil `make lowvram` (8 GB) baste. Orientativo ≥12–16 GB.
+
 ### Arranque optimizado para Flux 2 Klein 9B
 
 ```bash
