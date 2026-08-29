@@ -46,11 +46,19 @@ RUN python launch.py
 
 RUN python -m pip install --no-cache-dir python-dotenv pillow-avif-plugin imageio_ffmpeg hnswlib
 
+# ReActor: insightface tira de onnxruntime (CPU) y pisa onnxruntime-gpu. Ver Dockerfile principal.
+RUN python -m pip install --no-cache-dir --no-deps 'insightface==1.0.1' \
+    && python -m pip install --no-cache-dir \
+      'albumentations==1.4.3' \
+      'opencv-python>=4.7.0.72' \
+    && python -m pip uninstall -y onnxruntime \
+    && python -m pip install --no-cache-dir --force-reinstall --no-deps 'onnxruntime-gpu==1.28.0'
+
 RUN find /usr/local/lib/python3.13 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -type d -name 'docs' -exec rm -rf {} + 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -type d -name 'doc' -exec rm -rf {} + 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -name '*.a' -delete 2>/dev/null || true \
-    && find /usr/local/lib/python3.13 -name '*.so' -exec strip --strip-unneeded {} \; 2>/dev/null || true \
+    && find /usr/local/lib/python3.13 -name '*.so' ! -path '*/onnxruntime/*' -exec strip --strip-unneeded {} \; 2>/dev/null || true \
     && rm -rf /usr/local/lib/python3.13/site-packages/torch/share 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -type d -name tests -exec rm -rf {} + 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -type d -name 'test' -exec rm -rf {} + 2>/dev/null || true \

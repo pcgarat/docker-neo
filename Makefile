@@ -19,7 +19,7 @@ GITHUB_USER ?= pcgarat
 # cuda-malloc + lowvram + fp8 + offload RAM. Sin Sage. Sin --fast-fp8 (falla en Krea2 y solo ralentiza).
 ARGS_8GB = --cuda-malloc --lowvram --fp8_e4m3fn-unet --reserve-vram 2 --disable-sage --pin-shared-memory --mmap-torch-files
 
-.PHONY: help build build-no-cache build-cuda12 build-slim push push-cuda12 push-slim up down restart logs shell workspace ps clean klein9b lowvram iib-access krea2-ext install-docker
+.PHONY: help build build-no-cache build-cuda12 build-slim push push-cuda12 push-slim up down restart logs shell workspace seed-extensions ps clean klein9b lowvram chatbot chatbot-warmup test-warmup iib-access krea2-ext reactor-fix install-docker
 
 help:
 	@echo "sd-webui-forge-neo — objetivos disponibles:"
@@ -31,11 +31,16 @@ help:
 	@echo "  make restart       — down + up y seguir logs (Ctrl+C para salir)"
 	@echo "  make klein9b       — Arrancar optimizado para Klein 9B y seguir logs (Ctrl+C para salir)"
 	@echo "  make lowvram       — Arrancar con perfil 8 GB y seguir logs (Ctrl+C para salir)"
+	@echo "  make chatbot       — Perfil 8 GB + warmup torch.compile (guard_filter_fn) al size del último gen"
+	@echo "  make chatbot-warmup — Solo warmup (Forge ya tiene que estar arriba)"
+	@echo "  make test-warmup   — Tests del parser/payload de chatbot-warmup"
 	@echo "  make logs          — Ver logs del servicio (Ctrl+C para salir)"
 	@echo "  make shell         — Abrir una shell dentro del contenedor"
-	@echo "  make workspace     — Crear /workspace/forge-data y /workspace/forge-extensions (antes del primer up)"
+	@echo "  make workspace     — Crear árbol de datos y sembrar extensions/ si faltan (antes del primer up)"
+	@echo "  make seed-extensions — Copiar repo/extensions → EXTENSIONS_PATH solo si falta cada carpeta"
 	@echo "  make iib-access   — Crear .env en la extensión IIB con acceso a carpetas de salida (/data/output, /data/Images)"
-	@echo "  make krea2-ext    — Instalar/actualizar extensiones Krea2 Moodboard + Identity Edit en EXTENSIONS_PATH"
+	@echo "  make krea2-ext    — Forzar actualización Krea2 Moodboard + Identity Edit desde GitHub"
+	@echo "  make reactor-fix  — Reparar deps ReActor (onnxruntime-gpu vs CPU) en contenedor en marcha"
 	@echo "  make ps            — Estado del servicio"
 	@echo "  make clean         — down y eliminar imagen local"
 	@echo "  make install-docker — Instalar Docker Engine y Docker Compose (plugin) desde repo oficial (Ubuntu/Debian, requiere sudo)"
@@ -96,21 +101,93 @@ lowvram: workspace
 	@echo "Perfil 8GB: $(ARGS_8GB)"
 	@$(ENV_LOAD) && export EXTRA_ARGS="$(ARGS_8GB)" && $(COMPOSE) up -d && $(MAKE) logs
 
+# Llamadas API del chatBot: mismo modelo/size, N escenas seguidas.
+# 8 GB + compile guard_filter_fn (compatible con --cuda-malloc; max-autotune no lo es).
+# El warmup es 1 step al size de params.txt; no pisa el último gen (save_images=false + restaura params.txt).
+chatbot: workspace
+	@echo "Perfil chatBot 8GB: $(ARGS_8GB)"
+	@$(ENV_LOAD) && export EXTRA_ARGS="$(ARGS_8GB)" && $(COMPOSE) up -d && $(MAKE) chatbot-warmup && $(MAKE) logs
+
+chatbot-warmup:
+	@$(ENV_LOAD); \
+	data="$${DATA_PATH:-/workspace/forge-data}"; \
+	python3 "$(CURDIR)/scripts/chatbot_warmup.py" --data-path "$$data" --base-url "http://127.0.0.1:$(PORT)"
+
+test-warmup:
+	python3 -m unittest tests.test_chatbot_warmup -v
+
 logs:
 	$(COMPOSE) logs -f $(SERVICE)
 
 shell:
 	$(COMPOSE) exec $(SERVICE) /bin/bash
 
+# Crea el árbol de datos (DATA_PATH / EXTENSIONS_PATH del .env, o defaults bajo /workspace)
+# y siembra extensiones custom del repo si faltan en el destino.
+# Override CLI: make workspace DATA_PATH=./d EXTENSIONS_PATH=./d/extensions
 workspace:
-	@mkdir -p /workspace/forge-data /workspace/forge-extensions
-	@echo "Directorios /workspace/forge-data y /workspace/forge-extensions listos."
+	@cli_data="$(DATA_PATH)"; cli_ext="$(EXTENSIONS_PATH)"; \
+	$(ENV_LOAD); \
+	data="$${cli_data:-$${DATA_PATH:-/workspace/forge-data}}"; \
+	ext="$${cli_ext:-$${EXTENSIONS_PATH:-$$data/extensions}}"; \
+	mkdir -p "$$ext" "$$data/models" "$$data/output" "$$data/Models" 2>/dev/null || mkdir -p "$$ext" "$$data/models" "$$data/output"; \
+	echo "Árbol listo: data=$$data extensions=$$ext"; \
+	EXTENSIONS_PATH="$$ext" $(MAKE) seed-extensions
 
-# Crea .env en la extensión Infinite Image Browsing con acceso a /data/output y /data/Images (carpetas de salida).
+# Copia cada subcarpeta de ./extensions a EXTENSIONS_PATH solo si aún no existe en destino.
+# No sobrescribe instalaciones existentes (DB IIB, .env, etc.). No toca builtins de la imagen.
+# Override CLI: make seed-extensions EXTENSIONS_PATH=/ruta/limpia
+seed-extensions:
+	@cli_ext="$(EXTENSIONS_PATH)"; \
+	set -e; \
+	$(ENV_LOAD); \
+	src="$(CURDIR)/extensions"; \
+	ext_root="$${cli_ext:-$${EXTENSIONS_PATH:-/workspace/forge-data/extensions}}"; \
+	if [ ! -d "$$src" ]; then \
+	  echo "No hay $$src; nada que sembrar."; \
+	  exit 0; \
+	fi; \
+	mkdir -p "$$ext_root"; \
+	copied=0; skipped=0; \
+	for d in "$$src"/*/; do \
+	  [ -d "$$d" ] || continue; \
+	  name=$$(basename "$$d"); \
+	  dest="$$ext_root/$$name"; \
+	  if [ -e "$$dest" ]; then \
+	    echo "  skip  $$name (ya existe en $$dest)"; \
+	    skipped=$$((skipped+1)); \
+	  else \
+	    echo "  copy  $$name → $$dest"; \
+	    if command -v rsync >/dev/null 2>&1; then \
+	      rsync -a \
+	        --exclude '.git/' \
+	        --exclude 'iib.db' \
+	        --exclude 'iib_db_backup/' \
+	        --exclude '*.log' \
+	        --exclude '__pycache__/' \
+	        "$$d" "$$dest/" || { \
+	          echo "ERROR: no se pudo copiar $$name → $$dest (¿permisos?)."; \
+	          echo "  Prueba: sudo chown -R \$$(whoami) \"$$ext_root\""; \
+	          exit 1; \
+	        }; \
+	    else \
+	      mkdir -p "$$dest"; \
+	      cp -a "$$d"/. "$$dest/" || { \
+	          echo "ERROR: no se pudo copiar $$name → $$dest (¿permisos?)."; \
+	          echo "  Prueba: sudo chown -R \$$(whoami) \"$$ext_root\""; \
+	          exit 1; \
+	        }; \
+	    fi; \
+	    copied=$$((copied+1)); \
+	  fi; \
+	done; \
+	echo "Semilla extensions: $$copied copiadas, $$skipped omitidas → $$ext_root"
+
+# Crea .env en la extensión Infinite Image Browsing con acceso a carpetas de salida (/data/output, /data/Images).
 # Requiere EXTENSIONS_PATH en .env y que la extensión sd-webui-infinite-image-browsing esté instalada.
 iib-access:
 	@$(ENV_LOAD); \
-	ext_dir="$${EXTENSIONS_PATH:-/workspace/forge-extensions}/sd-webui-infinite-image-browsing"; \
+	ext_dir="$${EXTENSIONS_PATH:-/workspace/forge-data/extensions}/sd-webui-infinite-image-browsing"; \
 	if [ ! -d "$$ext_dir" ]; then \
 	  echo "No existe $$ext_dir. Instala antes la extensión Infinite Image Browsing desde la pestaña Extensiones."; \
 	  exit 1; \
@@ -125,7 +202,7 @@ iib-access:
 KREA2_TOOLKIT_REF ?= 8aac7a745202ae2eecdf4435b1a85fb5466ee51c
 krea2-ext:
 	@$(ENV_LOAD); \
-	ext_root="$${EXTENSIONS_PATH:-/workspace/forge-extensions}"; \
+	ext_root="$${EXTENSIONS_PATH:-/workspace/forge-data/extensions}"; \
 	mkdir -p "$$ext_root"; \
 	tmp=$$(mktemp -d); \
 	trap 'rm -rf "$$tmp"' EXIT; \
@@ -141,6 +218,14 @@ krea2-ext:
 	  && echo "  - sd-forge-krea2-moodboard" \
 	  && echo "  - sd-forge-krea2-edit (fix dynamic_args.pop aplicado)" \
 	  && echo "Reinicia la WebUI (make restart). Requiere imagen con el backend patch (make build)."
+
+# Repara deps de ReActor en el contenedor en marcha (sin rebuild).
+# insightface instala onnxruntime CPU y rompe CUDAExecutionProvider; este target lo deshace.
+# Permanente en imagen: make build (Dockerfile ya incluye el mismo arreglo).
+# Extensión recomendada: https://codeberg.org/Gourieff/sd-webui-reactor (no el fork -sfw de GitHub).
+reactor-fix:
+	@docker exec -i $(SERVICE) sh < "$(CURDIR)/scripts/reactor_fix_deps.sh"
+	@echo "Listo. Si la WebUI ya estaba arriba, reinicia: make restart"
 
 ps:
 	$(COMPOSE) ps

@@ -1,4 +1,4 @@
-# Última modificación: 2026-07-23
+# Última modificación: 2026-07-30
 
 # Integración de Krea 2 Moodboard + Identity Edit en docker-neo
 
@@ -160,7 +160,7 @@ Con el contenedor parado o vía `make shell`:
 
 ```bash
 # En el HOST, donde apunte EXTENSIONS_PATH (.env)
-EXT="${EXTENSIONS_PATH:-/workspace/forge-extensions}"
+EXT="${EXTENSIONS_PATH:-/workspace/forge-data/extensions}"
 git clone --depth 1 https://github.com/RedNodeAI/forge-neo-krea2-toolkit /tmp/krea2-toolkit
 cp -a /tmp/krea2-toolkit/extensions/sd-forge-krea2-moodboard "$EXT/"
 cp -a /tmp/krea2-toolkit/extensions/sd-forge-krea2-edit "$EXT/"

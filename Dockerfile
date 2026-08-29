@@ -49,7 +49,22 @@ RUN if [ "$BUILD_SLIM" = "1" ]; then \
 
 RUN python -m pip install --no-cache-dir python-dotenv pillow-avif-plugin imageio_ffmpeg hnswlib
 
+# ReActor: insightface declara dependencia de onnxruntime (CPU) y pisa el pybind de
+# onnxruntime-gpu → solo quedan Azure/CPU providers y el swap falla con CUDA.
+# Con --skip-install, install.py de la extensión no corre (y además pincha ORT 1.17.1,
+# incompatible con CUDA 13 / Py3.13). Horneamos deps aquí.
+# insightface 0.7.3 es sdist sin wheel cp313; 1.0.1 sí tiene wheel y es API-compatible.
+RUN python -m pip install --no-cache-dir --no-deps 'insightface==1.0.1' \
+    && python -m pip install --no-cache-dir \
+      'albumentations==1.4.3' \
+      'opencv-python>=4.7.0.72' \
+    && python -m pip uninstall -y onnxruntime \
+    && if [ "$BUILD_SLIM" != "1" ]; then \
+         python -m pip install --no-cache-dir --force-reinstall --no-deps 'onnxruntime-gpu==1.28.0'; \
+       fi
+
 # Limpieza agresiva para reducir tamaño (RunPod tiene límite de disco para la imagen)
+# No strippear onnxruntime: rompe providers CUDA.
 RUN find /usr/local/lib/python3.13 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -name '*.pyc' -delete 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -type d -name tests -exec rm -rf {} + 2>/dev/null || true \
@@ -57,7 +72,7 @@ RUN find /usr/local/lib/python3.13 -type d -name __pycache__ -exec rm -rf {} + 2
     && find /usr/local/lib/python3.13 -type d -name 'docs' -exec rm -rf {} + 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -type d -name 'doc' -exec rm -rf {} + 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -name '*.a' -delete 2>/dev/null || true \
-    && find /usr/local/lib/python3.13 -name '*.so' -exec strip --strip-unneeded {} \; 2>/dev/null || true \
+    && find /usr/local/lib/python3.13 -name '*.so' ! -path '*/onnxruntime/*' -exec strip --strip-unneeded {} \; 2>/dev/null || true \
     && rm -rf /usr/local/lib/python3.13/site-packages/torch/share 2>/dev/null || true \
     && find /app/webui -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true \
     && find /app/webui -name '*.pyc' -delete 2>/dev/null || true

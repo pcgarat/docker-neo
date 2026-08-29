@@ -7,3 +7,5 @@ docs
 .env
 .env.*
 *.log
+# Semilla de extensiones: solo para make seed-extensions en el host, no va en la imagen
+extensions

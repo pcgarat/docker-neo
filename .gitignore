@@ -28,3 +28,11 @@ temp/
 # Volúmenes locales (datos de Forge; no versionar)
 forge-data/
 workspace/
+
+# Runtime / basura dentro de la semilla de extensiones (no versionar si aparece)
+extensions/**/.git/
+extensions/**/iib.db
+extensions/**/iib_db_backup/
+extensions/**/*.log
+extensions/**/__pycache__/
+extensions/**/.env
