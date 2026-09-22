@@ -39,12 +39,14 @@ RUN git clone --filter=blob:none --no-checkout https://github.com/Haoming02/sd-w
     && rm -rf .git
 
 WORKDIR /app/webui
-# BUILD_SLIM=1: sin onnxruntime-gpu ni nunchaku (reduce mucho tamaño para RunPod)
+# BUILD_SLIM=1: sin onnxruntime-gpu (reduce mucho tamaño para RunPod)
+# Sin --nunchaku a propósito: ese flag fuerza torch 2.11, y los wheels precompilados de
+# flash_attn para cu130/cp313 solo existen contra torch 2.13 → --flash fallaba en silencio.
 ARG BUILD_SLIM=0
 RUN if [ "$BUILD_SLIM" = "1" ]; then \
       export COMMANDLINE_ARGS="--exit --skip-torch-cuda-test --xformers --sage --flash --bnb"; \
     else \
-      export COMMANDLINE_ARGS="--exit --skip-torch-cuda-test --xformers --sage --flash --nunchaku --bnb --onnxruntime-gpu"; \
+      export COMMANDLINE_ARGS="--exit --skip-torch-cuda-test --xformers --sage --flash --bnb --onnxruntime-gpu"; \
     fi && python launch.py
 
 RUN python -m pip install --no-cache-dir python-dotenv pillow-avif-plugin imageio_ffmpeg hnswlib
