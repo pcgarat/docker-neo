@@ -19,7 +19,13 @@ GITHUB_USER ?= pcgarat
 # cuda-malloc + lowvram + fp8 + offload RAM. Sin Sage. Sin --fast-fp8 (falla en Krea2 y solo ralentiza).
 ARGS_8GB = --cuda-malloc --lowvram --fp8_e4m3fn-unet --reserve-vram 2 --disable-sage --pin-shared-memory --mmap-torch-files
 
-.PHONY: help build build-no-cache build-cuda12 build-slim push push-cuda12 push-slim up down restart logs shell workspace seed-extensions ps clean klein9b lowvram chatbot chatbot-warmup test-warmup iib-access krea2-ext reactor-fix install-docker
+# Perfil 8 GB + atención INT8 (Comfy-Kitchen), que sustituye a flash_attn.
+# Solo rinde cuando la secuencia de atención es larga: vídeo (Wan) y alta resolución.
+# Medido en Krea2 a 1280px: 26,3s → 21,9s; a 768px no hay diferencia medible.
+# Ojo: a igual semilla produce una imagen distinta, no es intercambiable a mitad de un trabajo.
+ARGS_INT8_ATTN = $(ARGS_8GB) --use-ck-attention
+
+.PHONY: help build build-no-cache build-cuda12 build-slim push push-cuda12 push-slim up down restart logs shell workspace seed-extensions ps clean klein9b lowvram wan chatbot chatbot-warmup test-warmup iib-access krea2-ext reactor-fix install-docker
 
 help:
 	@echo "sd-webui-forge-neo — objetivos disponibles:"
@@ -31,6 +37,7 @@ help:
 	@echo "  make restart       — down + up y seguir logs (Ctrl+C para salir)"
 	@echo "  make klein9b       — Arrancar optimizado para Klein 9B y seguir logs (Ctrl+C para salir)"
 	@echo "  make lowvram       — Arrancar con perfil 8 GB y seguir logs (Ctrl+C para salir)"
+	@echo "  make wan           — Perfil 8 GB + atención INT8 (vídeo Wan / alta resolución)"
 	@echo "  make chatbot       — Perfil 8 GB + warmup torch.compile (guard_filter_fn) al size del último gen"
 	@echo "  make chatbot-warmup — Solo warmup (Forge ya tiene que estar arriba)"
 	@echo "  make test-warmup   — Tests del parser/payload de chatbot-warmup"
@@ -100,6 +107,10 @@ klein9b: workspace
 lowvram: workspace
 	@echo "Perfil 8GB: $(ARGS_8GB)"
 	@$(ENV_LOAD) && export EXTRA_ARGS="$(ARGS_8GB)" && $(COMPOSE) up -d && $(MAKE) logs
+
+wan: workspace
+	@echo "Perfil 8GB + atención INT8: $(ARGS_INT8_ATTN)"
+	@$(ENV_LOAD) && export EXTRA_ARGS="$(ARGS_INT8_ATTN)" && $(COMPOSE) up -d && $(MAKE) logs
 
 # Llamadas API del chatBot: mismo modelo/size, N escenas seguidas.
 # 8 GB + compile guard_filter_fn (compatible con --cuda-malloc; max-autotune no lo es).
