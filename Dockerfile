@@ -49,6 +49,15 @@ RUN if [ "$BUILD_SLIM" = "1" ]; then \
 
 RUN python -m pip install --no-cache-dir python-dotenv pillow-avif-plugin imageio_ffmpeg hnswlib
 
+# sd-dynamic-prompts: con --skip-install su install.py no corre. Sin los extras
+# [attentiongrabber,magicprompt], que arrastran transformers[torch] y pisarían el torch de la imagen.
+RUN python -m pip install --no-cache-dir 'dynamicprompts~=0.31.0' 'send2trash~=1.8'
+
+# Forge Classic renombró generation_parameters_copypaste → infotext_utils sin dejar alias.
+# Mismo shim que mantiene A1111 upstream; lo necesitan extensiones pre-1.9 (sd-dynamic-prompts).
+RUN printf 'from modules.infotext_utils import *  # noqa: F401\n' \
+    > /app/webui/modules/generation_parameters_copypaste.py
+
 # ReActor: insightface declara dependencia de onnxruntime (CPU) y pisa el pybind de
 # onnxruntime-gpu → solo quedan Azure/CPU providers y el swap falla con CUDA.
 # Con --skip-install, install.py de la extensión no corre (y además pincha ORT 1.17.1,

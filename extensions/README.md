@@ -17,6 +17,29 @@ El patch de backend Krea2 va en la **imagen** (`patches/`), no aquí.
 
 Instálalo en `EXTENSIONS_PATH` desde [codeberg.org/Gourieff/sd-webui-reactor](https://codeberg.org/Gourieff/sd-webui-reactor) (no el fork `-sfw` de GitHub). Las deps Python van en la **imagen** (`make build` / `make reactor-fix`); ver README § ReActor.
 
+## sd-dynamic-prompts + estilos Krea2 (no van en la semilla)
+
+Wildcards y biblioteca de estilos fotográficos para el encoder LLM de Krea2. Las deps Python van en la **imagen** (`dynamicprompts`, `send2trash`), junto al shim de `generation_parameters_copypaste` que la extensión necesita porque Forge Classic renombró ese módulo a `infotext_utils`.
+
+Instalación en `EXTENSIONS_PATH` (`$ext`), una vez por volumen de datos:
+
+```sh
+git clone https://github.com/adieyal/sd-dynamic-prompts.git "$ext/sd-dynamic-prompts"
+git clone https://github.com/aoleg/photographic-styles-and-wildcards-for-Krea-2.git "$ext/photographic-styles-and-wildcards-for-Krea-2"
+
+# Estilos: Forge lee <data>/styles_integrated.csv además de styles.csv (que queda
+# libre para los estilos propios guardados desde la UI).
+ln -sfn extensions/photographic-styles-and-wildcards-for-Krea-2/styles.csv "$data/styles_integrated.csv"
+
+# Wildcards fuera de la extensión: así desinstalarla no se lleva la biblioteca.
+mkdir -p "$data/wildcards/film"
+ln -sfn ../../wildcards "$ext/sd-dynamic-prompts/wildcards"
+ln -sfn ../../extensions/photographic-styles-and-wildcards-for-Krea-2/photographica.yaml \
+  "$data/wildcards/film/photographica.yaml"
+```
+
+Los symlinks apuntan al repo clonado, así que un `git pull` en él actualiza estilos y wildcards.
+
 ## Reglas
 
 - Añade aquí solo extensiones custom (una carpeta por extensión).
