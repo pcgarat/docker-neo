@@ -85,10 +85,14 @@ FROM nvidia/cuda:13.0.2-runtime-ubuntu24.04 AS runtime
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 
+# gcc: Triton (flash/sage JIT) necesita un C compiler en runtime; sin él:
+# RuntimeError: Failed to find C compiler. Please specify via CC ...
 RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
     ffmpeg \
     git \
+    gcc \
+    g++ \
     && add-apt-repository -y ppa:deadsnakes/ppa \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
