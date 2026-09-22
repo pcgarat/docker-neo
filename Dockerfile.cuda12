@@ -39,7 +39,7 @@ RUN git clone --filter=blob:none --no-checkout https://github.com/Haoming02/sd-w
     && rm -rf .git
 
 WORKDIR /app/webui
-ENV COMMANDLINE_ARGS="--exit --skip-torch-cuda-test --xformers --sage --flash --bnb --onnxruntime-gpu"
+ENV COMMANDLINE_ARGS="--exit --skip-torch-cuda-test --xformers --flash --onnxruntime-gpu"
 ENV TORCH_INDEX_URL=https://download.pytorch.org/whl/cu124
 ENV TORCH_COMMAND=pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
 RUN python launch.py
@@ -106,7 +106,7 @@ WORKDIR /app/webui
 COPY --from=builder /usr/local/lib/python3.13 /usr/local/lib/python3.13
 COPY --from=builder /app/webui /app/webui
 
-ENV COMMANDLINE_ARGS="--listen --port 7860 --data-dir /data --gradio-allowed-path /app/webui --gradio-allowed-path /data --enable-insecure-extension-access --skip-prepare-environment --skip-install --api --sage"
+ENV COMMANDLINE_ARGS="--listen --port 7860 --data-dir /data --gradio-allowed-path /app/webui --gradio-allowed-path /data --enable-insecure-extension-access --skip-prepare-environment --skip-install --api"
 EXPOSE 7860
 VOLUME ["/data"]
 

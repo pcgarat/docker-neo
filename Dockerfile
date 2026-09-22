@@ -44,9 +44,9 @@ WORKDIR /app/webui
 # flash_attn para cu130/cp313 solo existen contra torch 2.13 → --flash fallaba en silencio.
 ARG BUILD_SLIM=0
 RUN if [ "$BUILD_SLIM" = "1" ]; then \
-      export COMMANDLINE_ARGS="--exit --skip-torch-cuda-test --xformers --sage --flash --bnb"; \
+      export COMMANDLINE_ARGS="--exit --skip-torch-cuda-test --xformers --flash"; \
     else \
-      export COMMANDLINE_ARGS="--exit --skip-torch-cuda-test --xformers --sage --flash --bnb --onnxruntime-gpu"; \
+      export COMMANDLINE_ARGS="--exit --skip-torch-cuda-test --xformers --flash --onnxruntime-gpu"; \
     fi && python launch.py
 
 RUN python -m pip install --no-cache-dir python-dotenv pillow-avif-plugin imageio_ffmpeg hnswlib
@@ -120,7 +120,7 @@ WORKDIR /app/webui
 COPY --from=builder /usr/local/lib/python3.13 /usr/local/lib/python3.13
 COPY --from=builder /app/webui /app/webui
 
-ENV COMMANDLINE_ARGS="--listen --port 7860 --data-dir /data --gradio-allowed-path /app/webui --gradio-allowed-path /data --enable-insecure-extension-access --skip-prepare-environment --skip-install --api --sage"
+ENV COMMANDLINE_ARGS="--listen --port 7860 --data-dir /data --gradio-allowed-path /app/webui --gradio-allowed-path /data --enable-insecure-extension-access --skip-prepare-environment --skip-install --api"
 EXPOSE 7860
 VOLUME ["/data"]
 

@@ -16,8 +16,8 @@ REGISTRY_IMAGE_CUDA12 ?= ghcr.io/$(GITHUB_USER)/forge-neo:cuda12
 GITHUB_USER ?= pcgarat
 
 # Perfil GPU ≤12 GB (p. ej. RTX 4060 8 GB): Klein 9B, Flux, Qwen y modelos grandes.
-# cuda-malloc + lowvram + fp8 + offload RAM. Sin Sage. Sin --fast-fp8 (falla en Krea2 y solo ralentiza).
-ARGS_8GB = --cuda-malloc --lowvram --fp8_e4m3fn-unet --reserve-vram 2 --disable-sage --pin-shared-memory --mmap-torch-files
+# cuda-malloc + lowvram + fp8 + offload RAM. Sin --fast-fp8 (falla en Krea2 y solo ralentiza).
+ARGS_8GB = --cuda-malloc --lowvram --fp8_e4m3fn-unet --reserve-vram 2 --pin-shared-memory --mmap-torch-files
 
 # Perfil 8 GB + atención INT8 (Comfy-Kitchen), que sustituye a flash_attn.
 # Solo rinde cuando la secuencia de atención es larga: vídeo (Wan) y alta resolución.
