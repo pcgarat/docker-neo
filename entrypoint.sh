@@ -45,6 +45,28 @@ if [ "$(id -u)" -eq 0 ]; then
   if [ -d /app/webui ]; then
     chown -R "$puid:$pgid" /app/webui
   fi
+
+  # setpriv no cambia HOME: el proceso hereda HOME=/root y Triton/HF fallan con
+  # PermissionError al crear /root/.triton (uid PUID no puede escribir ahí).
+  home_dir="$(getent passwd "$puid" 2>/dev/null | cut -d: -f6)"
+  if [ -z "$home_dir" ] || [ ! -d "$home_dir" ]; then
+    home_dir="$data_dir/home"
+    mkdir -p "$home_dir"
+    chown "$puid:$pgid" "$home_dir"
+  fi
+  export HOME="$home_dir"
+  mkdir -p "$data_dir/cache/triton" "$data_dir/cache/torchinductor"
+  chown -R "$puid:$pgid" "$data_dir/cache/triton" "$data_dir/cache/torchinductor" 2>/dev/null || true
+  export TRITON_CACHE_DIR="$data_dir/cache/triton"
+  export TORCHINDUCTOR_CACHE_DIR="$data_dir/cache/torchinductor"
+  # Triton JIT: si no hay CC explícito busca gcc/cc en PATH.
+  if [ -z "${CC:-}" ] && command -v gcc >/dev/null 2>&1; then
+    export CC="$(command -v gcc)"
+  fi
+  if [ -z "${CXX:-}" ] && command -v g++ >/dev/null 2>&1; then
+    export CXX="$(command -v g++)"
+  fi
+
   groups="$pgid,$video_gid,$render_gid"
   exec setpriv --reuid="$puid" --regid="$pgid" --groups="$groups" -- "$@"
 fi

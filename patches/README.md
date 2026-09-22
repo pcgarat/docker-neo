@@ -2,9 +2,9 @@
 
 | Patch | Qué hace |
 |-------|----------|
-| `krea2-features-backend.patch` | Moodboard + Identity Edit (hooks K2 / Qwen3-VL). Regenerado para Neo `97ff3a4…`. |
+| `krea2-features-backend.patch` | Moodboard + Identity Edit (hooks K2 / Qwen3-VL). Regenerado para Neo `41359cd…` (ver "Segunda regeneración" abajo). |
 | `krea2-features-backend.original.patch` | Original del toolkit (solo referencia; no aplicar en neo actual). |
-| `qwen35-vision-attention-fix.patch` | Fix (2 partes): (1) `attention_function(...)` mal llamado en visión Qwen3-VL → `TypeError: attention_flash() missing k,v,heads`; (2) fallback a `attention_pytorch` cuando el encoder visual corre en CPU (lowvram offload) → `NotImplementedError: flash_attn::_flash_attn_forward ... 'CPU' backend`. |
+| `qwen35-vision-attention-fix.patch` | Fix (2 partes): (1) `attention_function(...)` mal llamado en visión Qwen3-VL → `TypeError: attention_flash() missing k,v,heads` (upstream ya lo arregló por su cuenta en `41359cd`, ver abajo); (2) fallback a `attention_pytorch` cuando el encoder visual corre en CPU (lowvram offload) → `NotImplementedError: flash_attn::_flash_attn_forward ... 'CPU' backend`. |
 
 ---
 
@@ -48,8 +48,45 @@ dynamic_args["ref_fit"] = []
 
 ## SHA pinned
 
-- Forge Neo (`neo`) SHA verificado: `97ff3a4024be2f0d5316f16e868e5ef822768872`
+- Forge Neo (`neo`) SHA verificado: `41359cd4b8b89212b3dbad8c9af719160a12ed63` (ver "Segunda regeneración" abajo; SHA anterior `97ff3a4024be2f0d5316f16e868e5ef822768872`).
 - El patch aplica limpio contra ese SHA exacto. Si `neo` avanza, **re-verificar** con `git apply --check --verbose` antes de dar por bueno el build; no asumir compatibilidad indefinida.
+
+## Segunda regeneración (`97ff3a4` → `41359cd`, 81 commits, 2026-07-23 a 2026-09-18)
+
+### Por qué se regeneró
+
+Al intentar actualizar `FORGE_NEO_REF` al HEAD de `neo`, ninguno de los dos patches aplicaba limpio. A diferencia de la primera regeneración (deriva de contexto), esta vez hubo **choques de lógica reales**: upstream añadió su propia versión, más simple, de features que este patch ya cubría de forma más completa:
+
+- **`7c866142` ("Krea 2 Edit")**: upstream agregó soporte nativo de conditioning por imagen de referencia para img2img normal (`opts.krea2_do_reference`, `self.ref_latents`/`self.ini_latent` inicializados en `ForgeDiffusionEngine.__init__` de `backend/diffusion_engine/base.py`, método `get_learned_conditioning_with_image(prompt, images)` + `encode_vision`). Es un mecanismo **automático y de una sola referencia**, distinto y no gated por el mismo flujo que Moodboard (`arm_moodboard`, activado explícitamente por la extensión) o Identity Edit (`arm_edit`).
+- La misma idea, más simple, en `backend/nn/krea.py`: upstream metió su propio in-context edit path (`dynamic_args.ref_latents`, sin `ref_boosts`/`ref_fit`, usando `_imgids`/`adaptive_resize`) en el `forward()` del DiT, en el mismo punto donde este patch ya tenía su versión superset (boosts por-referencia, geometría "fit", `_imgids_offset`, `_ref_attn_bias`).
+- **`backend/nn/llm/qwen35.py`**: upstream arregló por su cuenta la Parte 1 del bug de `qwen35-vision-attention-fix` (el `TypeError` de `attention_function(...)` mal llamado), pero moviendo la llamada a `attention_function(q, k, v, heads, skip_reshape=True)` **dentro** de `Qwen35VisionAttention.forward`, ya no en el `forward()` externo de la vision transformer. La Parte 2 (fallback a `attention_pytorch` en CPU/lowvram) seguía sin existir upstream.
+- **`backend/text_processing/qwen3vl_engine.py`**: `tokenize()` cambió de firma — de `tokenize(self, texts, images=[])` (lista de tensores, con `self.image_template`) a `tokenize(self, texts: list[str], images: int = 0)` (imágenes como **conteo**, sin `image_template`, prependiendo `vision_block * images` directo al texto).
+
+### Cómo se regeneró
+
+Mismo método que la primera vez (cherry-pick para forzar un merge de 3 vías real en vez de parcheo por texto):
+
+1. Se aplicó el patch existente sobre el SHA viejo (`97ff3a4`) — aplicó limpio, confirmando que no había drift adicional respecto a esa base.
+2. Se hizo `git cherry-pick` de ese commit sobre el HEAD nuevo de `neo` (`41359cd`). Resultado: `backend/nn/llm/llama.py` y `backend/attention.py` se fusionaron **sin conflicto** (cambios upstream en áreas distintas: MRoPE intercalado de Qwen3-VL, DeepStack, offset de `attention_flash` con máscara). Hubo conflicto real en los otros 4 ficheros.
+3. Cada conflicto se resolvió a mano, no por "tomar un lado":
+   - `backend/diffusion_engine/krea.py`: se **conservaron ambos** mecanismos de referencia. El método nativo de upstream se renombró a `get_learned_conditioning_with_start_image` (mismo cuerpo) para no chocar de nombre con el `get_learned_conditioning_with_image` del patch (que es la ruta Moodboard, firma distinta). `get_learned_conditioning` ahora prueba, en orden: Identity Edit armado → Moodboard armado → referencia nativa de img2img (`opts.krea2_do_reference`) → texto plano. La rama de referencia nativa también limpia `dynamic_args["ref_boosts"]`/`["ref_fit"]` al activarse, para que boosts de un Identity Edit previo no se filtren a una referencia automática de img2img (esas dos claves no las limpia `dynamic_args.reset()`, ver `backend/args.py`).
+   - `backend/nn/krea.py`: se tomó entera la versión del patch (superset funcional: boosts por-referencia + geometría "fit"; no-op cuando no hay refs armadas, igual que la versión nativa de upstream en ese caso). Se eliminó el helper `_imgids` y el import de `adaptive_resize` de upstream, que quedaban sin uso.
+   - `backend/nn/llm/qwen35.py`: la Parte 2 (fallback CPU-safe) se reubicó dentro de `Qwen35VisionAttention.forward`, en el nuevo punto donde upstream ya llama a `attention_function` directo — la Parte 1 ya no hace falta, upstream la resolvió.
+   - `backend/text_processing/qwen3vl_engine.py`: `tokenize()` se reescribió sobre la firma nueva (`images: int`), conservando el comportamiento del patch de no duplicar el vision block cuando el texto (Moodboard/Edit) ya lo trae incluido — el check pasó de comparar contra `self.image_template` (eliminado upstream) a comparar contra el propio `self.vision_block` en el texto ya construido. El hunk de `process_tokens` (expansión de multipliers de emphasis cuando hay imágenes) no dependía de nada de esto y se tomó tal cual del patch.
+4. Se generó el diff final igual que antes: `git diff 41359cd 9fce477e -- <ficheros>`.
+5. Se verificó en un clone limpio e independiente del SHA nuevo: `git apply --check --verbose` + `git apply --verbose` (ambos patches, ambos limpios) + `python3 -m py_compile` sobre los 6 ficheros resultantes.
+
+### Riesgo específico de esta regeneración
+
+Esta vez el conflicto era de **diseño**, no de contexto: hubo que decidir cómo conviven dos implementaciones independientes de "conditioning por imagen de referencia" (la nativa de upstream, simple y automática, vs. la de este patch, explícita y con más control) sin que una pise el estado de la otra. La lógica se revisó con cuidado (ver arriba).
+
+### Bug real encontrado al probar con GPU (no detectable por `py_compile`)
+
+A diferencia de la primera regeneración, esta vez sí se hizo una build completa y un `txt2img` real contra un checkpoint Krea2 (GPU RTX 4060, ver "Riesgos funcionales" — sigue siendo la única cobertura de runtime que existe). Primer intento: `AttributeError: 'SingleStreamDiT' object has no attribute '_unpack_context'`.
+
+Causa: al resolver el primer conflicto de `backend/nn/krea.py` (bloque `get_learned_conditioning`/`encode_vision` de `diffusion_engine/krea.py`, no este), se copió literal la línea `context = self._unpack_context(context.squeeze(1))` del lado "theirs" (patch viejo) sin verificar que `_unpack_context` siguiera existiendo. **No existía**: upstream la eliminó porque movió el trabajo de "desempaquetar" el contexto (de `(b, seq, 12*2560)` plano a `(b, seq, 12, 2560)`) a `Qwen3VLTextProcessingEngine.__call__`, en `qwen3vl_engine.py` — el hunk nuevo `b, seq, fuse = z.shape; ...; z = z.reshape(b * seq, 12, 2560)` (no tocado por este patch, ver tabla de ficheros) ya entrega el contexto pre-desempaquetado por línea; `SingleStreamDiT.forward` upstream ahora usa `context` tal cual, sin reshape. Fix: se borró la línea (no hace falta reemplazarla por nada, `TextFusionTransformer.forward` sigue esperando el mismo shape 4D, solo que ya llega así).
+
+Esto confirma lo que ya advertía este documento: la verificación estática (`git apply --check` + `py_compile`) prueba que el código **parsea**, no que sus asunciones de shape/contrato con el resto del archivo sigan siendo válidas tras un merge de 3 vías. Cualquier línea copiada de un lado del conflicto sin revisar si lo que llama sigue existiendo en el otro lado es sospechosa por defecto.
 
 ## Ficheros que toca el patch regenerado
 
@@ -60,7 +97,7 @@ dynamic_args["ref_fit"] = []
 
 ## Parche `qwen35-vision-attention-fix`
 
-En `backend/nn/llm/qwen35.py`, el port de ComfyUI hacía:
+En `backend/nn/llm/qwen35.py`, el port de ComfyUI hacía originalmente:
 
 ```python
 optimized_attention = attention_function(x.device, mask=False, small_input=True)
@@ -68,13 +105,9 @@ optimized_attention = attention_function(x.device, mask=False, small_input=True)
 
 En Forge Neo, `attention_function` ya es la implementación concreta (`attention_flash` / sage / …) con firma `(q, k, v, heads, …)`, no un factory. Esa llamada disparaba el `TypeError` al usar Moodboard/Identity Edit (ruta visión).
 
-### Parte 1: asignación, no llamada
+### Parte 1: asignación, no llamada — **ya no aplica, resuelto upstream**
 
-Fix alineado con `llama.py` / `qwen_vl.py`:
-
-```python
-optimized_attention = attention_function
-```
+Desde `41359cd` (ver "Segunda regeneración" arriba), upstream movió la llamada dentro de `Qwen35VisionAttention.forward` como `attention_function(q, k, v, self.num_heads, skip_reshape=True)` — llamada correcta, sin el factory roto. Esta parte del fix ya no forma parte del patch; solo queda la Parte 2, reubicada en ese mismo punto.
 
 ### Parte 2: fallback CPU-safe (lowvram)
 
@@ -89,8 +122,10 @@ NotImplementedError: Could not run 'flash_attn::_flash_attn_forward' with argume
 ```python
 from backend.attention import attention_function, attention_pytorch
 ...
-optimized_attention = attention_function if x.device.type == "cuda" else attention_pytorch
+optimized_attention = attention_function if q.device.type == "cuda" else attention_pytorch
 ```
+
+(Desde `41359cd` esto vive dentro del loop `for q, k, v in zip(q_splits, k_splits, v_splits)` de `Qwen35VisionAttention.forward` — antes de la segunda regeneración se calculaba una sola vez en el `forward()` externo sobre `x.device`; ver "Segunda regeneración" arriba.)
 
 `attention_pytorch` es CPU/CUDA-safe (usa `torch.nn.functional.scaled_dot_product_attention` sin forzar backend) y tiene la misma firma `(q, k, v, heads, skip_reshape=...)` que consume `Qwen35VisionAttention.forward`, por lo que es un *drop-in* sin tocar el resto de la ruta de visión.
 
@@ -105,8 +140,9 @@ Aplica sobre el mismo `FORGE_NEO_REF` que el patch Krea2.
 
 ## Riesgos funcionales no cubiertos por esta regeneración
 
-La verificación ha sido **estática** (no hay `torch` en el entorno de trabajo para levantar el WebUI real):
+La verificación ha sido **estática** (no hay `torch` en el entorno de trabajo para levantar el WebUI real), tanto en la primera regeneración (`97ff3a4`) como en la segunda (`41359cd`):
 
-- No se ha probado generación real (moodboard, identity edit, ni fallback normal) en runtime.
-- El bug de `dynamic_args.pop()` es la única incompatibilidad estructural detectada por inspección manual, pero no descarta regresiones sutiles derivadas de los ~50 commits de diferencia entre la base del toolkit y el HEAD actual (LoRA, cuantización, refactor de attention/convrot, `img2img refactor`) que no tocan directamente estos 4 ficheros pero podrían interactuar en runtime (p.ej. `attention_function`, `UnetPatcher`, paths de cuantización).
-- Recomendado: probar en un entorno con GPU/`torch` antes de considerar esto listo para producción.
+- No se ha probado generación real (moodboard, identity edit, ni fallback normal ni referencia nativa de img2img) en runtime.
+- El bug de `dynamic_args.pop()` es la única incompatibilidad estructural detectada por inspección manual en la primera regeneración, pero no descarta regresiones sutiles derivadas de los commits de diferencia entre la base del toolkit y el HEAD actual (LoRA, cuantización, refactor de attention/convrot, `img2img refactor`) que no tocan directamente estos ficheros pero podrían interactuar en runtime (p.ej. `attention_function`, `UnetPatcher`, paths de cuantización).
+- De la segunda regeneración, el punto que más se beneficiaría de una prueba real: la convivencia entre Identity Edit / Moodboard y la referencia nativa de img2img (`opts.krea2_do_reference`) en `get_learned_conditioning` de `backend/diffusion_engine/krea.py` — la lógica de reseteo de `dynamic_args["ref_boosts"]`/`["ref_fit"]` al pasar de una a otra se razonó por inspección de código, no se ejecutó.
+- Recomendado: probar en un entorno con GPU/`torch` (moodboard, identity edit, e img2img con `krea2_do_reference` activado, incluyendo alternar entre los tres en la misma sesión) antes de considerar esto listo para producción.

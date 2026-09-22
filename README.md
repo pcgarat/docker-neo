@@ -187,7 +187,7 @@ Estructura bajo `/data` (y en el host bajo `DATA_PATH`): `models/`, `output/`, `
 
 ## Variables de entorno
 
-- **`PUID` / `PGID`** — UID/GID efectivo de Forge (local: `id -u` / `id -g`). El entrypoint arranca como root, ajusta permisos de `/data` y `/app/webui`, y hace `setpriv` a ese usuario para que `output/` no quede `root:root` (rompe miniaturas en Nautilus). Opcional: `VIDEO_GID` / `RENDER_GID`.
+- **`PUID` / `PGID`** — UID/GID efectivo de Forge (local: `id -u` / `id -g`). El entrypoint arranca como root, ajusta permisos de `/data` y `/app/webui`, y hace `setpriv` a ese usuario para que `output/` no quede `root:root` (rompe miniaturas en Nautilus). También fija `HOME` al home de ese UID, `TRITON_CACHE_DIR` / `TORCHINDUCTOR_CACHE_DIR` bajo `/data/cache/`, y `CC`/`CXX` si hay `gcc`/`g++` (Triton JIT con `--flash`/`--sage`). Opcional: `VIDEO_GID` / `RENDER_GID`.
 - **`COMMANDLINE_ARGS`** — ya definido en el compose; puedes extenderlo (p. ej. `--gradio-auth user:pass`).
 - **`EXTRA_ARGS`** — argumentos que el entrypoint añade al arranque (p. ej. `--cuda-malloc --normalvram --bf16-unet`). El compose los inyecta en el contenedor; `make klein9b` / `make lowvram` / `make chatbot` pisan el valor del `.env`. Útil también en RunPod para ajustar VRAM sin cambiar el start command.
 - **`NVIDIA_VISIBLE_DEVICES`** — por defecto `all`; pon IDs de GPU si quieres limitar.
