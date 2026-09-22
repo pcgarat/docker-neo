@@ -26,7 +26,7 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.13 1
 RUN python3.13 -m ensurepip --upgrade
 
 # Pin de Forge Neo compatible con patches/krea2-features-backend.patch (ver patches/README.md).
-ARG FORGE_NEO_REF=97ff3a4024be2f0d5316f16e868e5ef822768872
+ARG FORGE_NEO_REF=41359cd4b8b89212b3dbad8c9af719160a12ed63
 WORKDIR /app
 COPY patches/krea2-features-backend.patch patches/qwen35-vision-attention-fix.patch /tmp/
 RUN git clone --filter=blob:none --no-checkout https://github.com/Haoming02/sd-webui-forge-classic webui \
