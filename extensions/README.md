@@ -13,6 +13,12 @@ Código de extensiones **no built-in** que `make up` / `make workspace` copian a
 
 El patch de backend Krea2 va en la **imagen** (`patches/`), no aquí.
 
+## Extensiones en la imagen (`builtin-extensions/`)
+
+Algunas viven en `extensions-builtin` de la imagen (no en este volumen), p. ej.
+**Krea2 Depth/Pose ControlNet-LoRA**. Ver [`builtin-extensions/README.md`](../builtin-extensions/README.md)
+y `make krea2-depth-ext`.
+
 ## ReActor (no va en la semilla)
 
 Instálalo en `EXTENSIONS_PATH` desde [codeberg.org/Gourieff/sd-webui-reactor](https://codeberg.org/Gourieff/sd-webui-reactor) (no el fork `-sfw` de GitHub). Las deps Python van en la **imagen** (`make build` / `make reactor-fix`); ver README § ReActor.

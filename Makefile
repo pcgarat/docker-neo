@@ -25,7 +25,7 @@ ARGS_8GB = --cuda-malloc --lowvram --fp8_e4m3fn-unet --reserve-vram 2 --pin-shar
 # Ojo: a igual semilla produce una imagen distinta, no es intercambiable a mitad de un trabajo.
 ARGS_INT8_ATTN = $(ARGS_8GB) --use-ck-attention
 
-.PHONY: help build build-no-cache build-cuda12 build-slim push push-cuda12 push-slim up down restart logs shell workspace seed-extensions ps clean klein9b lowvram wan chatbot chatbot-warmup test-warmup iib-access krea2-ext reactor-fix install-docker
+.PHONY: help build build-no-cache build-cuda12 build-slim push push-cuda12 push-slim up down restart logs shell workspace seed-extensions ps clean klein9b lowvram wan chatbot chatbot-warmup test-warmup iib-access krea2-ext krea2-depth-ext reactor-fix install-docker
 
 help:
 	@echo "sd-webui-forge-neo — objetivos disponibles:"
@@ -47,6 +47,7 @@ help:
 	@echo "  make seed-extensions — Copiar repo/extensions → EXTENSIONS_PATH solo si falta cada carpeta"
 	@echo "  make iib-access   — Crear .env en la extensión IIB con acceso a carpetas de salida (/data/output, /data/Images)"
 	@echo "  make krea2-ext    — Forzar actualización Krea2 Moodboard + Identity Edit desde GitHub"
+	@echo "  make krea2-depth-ext — Actualizar Depth/Pose ControlNet-LoRA (builtin) desde GitHub; luego make build"
 	@echo "  make reactor-fix  — Reparar deps ReActor (onnxruntime-gpu vs CPU) en contenedor en marcha"
 	@echo "  make ps            — Estado del servicio"
 	@echo "  make clean         — down y eliminar imagen local"
@@ -229,6 +230,35 @@ krea2-ext:
 	  && echo "  - sd-forge-krea2-moodboard" \
 	  && echo "  - sd-forge-krea2-edit (fix dynamic_args.pop aplicado)" \
 	  && echo "Reinicia la WebUI (make restart). Requiere imagen con el backend patch (make build)."
+
+# Actualiza el vendor de Krea2 Depth/Pose ControlNet-LoRA (extensions-builtin de la imagen).
+# Tras correrlo: make build && make restart. El peso ~862 MB no se descarga aquí.
+KREA2_DEPTH_REF ?= forge-classic-2.28.1
+KREA2_DEPTH_REPO ?= https://github.com/fabiencomte/Krea-2-controlnet.git
+krea2-depth-ext:
+	@set -e; \
+	dest="$(CURDIR)/builtin-extensions/sd-forge-krea2-depth-controlnet"; \
+	tmp=$$(mktemp -d); \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	echo "Clonando $(KREA2_DEPTH_REPO) @ $(KREA2_DEPTH_REF)…"; \
+	git clone --depth 1 -b "$(KREA2_DEPTH_REF)" "$(KREA2_DEPTH_REPO)" "$$tmp/src"; \
+	ref=$$(git -C "$$tmp/src" rev-parse HEAD); \
+	rm -rf "$$dest"; \
+	mkdir -p "$$dest"; \
+	cp -a "$$tmp/src/scripts" "$$tmp/src/forge_krea2_depth" "$$tmp/src/install.py" "$$tmp/src/THIRD_PARTY_NOTICES.md" "$$dest/"; \
+	printf '%s\n' \
+	  '# Krea 2 Depth / Pose ControlNet-LoRA (Forge)' \
+	  '' \
+	  "Vendorado desde $(KREA2_DEPTH_REPO)" \
+	  "rama \`$(KREA2_DEPTH_REF)\` @ \`$$ref\`." \
+	  '' \
+	  'Va en **extensions-builtin** de la imagen Docker. Modelo en:' \
+	  '\`$$DATA_PATH/Models/ControlNet/Krea2/depth-control-lora.safetensors\`' \
+	  '' \
+	  'Tras actualizar: `make build` && `make restart`.' \
+	  > "$$dest/README.md"; \
+	echo "Actualizado $$dest @ $$ref"; \
+	echo "Siguiente: make build && make restart"
 
 # Repara deps de ReActor en el contenedor en marcha (sin rebuild).
 # insightface instala onnxruntime CPU y rompe CUDAExecutionProvider; este target lo deshace.

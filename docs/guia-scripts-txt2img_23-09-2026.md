@@ -27,7 +27,8 @@ Tres consecuencias de esto condicionan casi todo lo que sigue:
 | img2img Hires Fix | Sí, es la forma de tener hires fix en img2img. Usa 1.5× en vez de 2× |
 | Dynamic Prompts | Sí, para wildcards. Vigila el modo combinatorio |
 | ReActor | Solo como pasada final y aparte. Para identidad en Krea 2, Identity Edit es mejor |
-| ControlNet Integrated | Sí, tienes el ControlNet de depth de Krea 2. No aplica a Klein ni a Wan |
+| ControlNet Integrated | No para el peso Krea2 depth (es ControlNet-LoRA). Usa el panel Depth/Pose dedicado |
+| Krea 2 Depth / Pose ControlNet-LoRA | Sí, para profundidad (y pose) en Krea 2. Horneado en la imagen |
 | MultiDiffusion Integrated | Solo para ampliar a 3–4K en img2img. No para txt2img directo |
 | Never OOM Integrated | **VAE tiled: sí, déjalo puesto.** UNet: no, es redundante con `--lowvram` |
 | ImageStitch Integrated | Sí, es de los más útiles: da multi-imagen en Klein y último fotograma en Wan I2V |
@@ -93,13 +94,21 @@ Intercambio de caras por post-proceso. Detecta la cara en la imagen generada y l
 
 ## ControlNet Integrated
 
-Condiciona la generación con una guía estructural (profundidad, bordes, pose...). Requiere un modelo ControlNet **entrenado para tu checkpoint concreto**, y eso es lo que decide si te sirve o no.
+Condiciona la generación con una guía estructural. Requiere un ControlNet **clásico** (CLDM) compatible con la arquitectura del checkpoint.
 
-**Cuándo sí.** Tienes `krea2DepthControlnet_v10.safetensors` en `Models/ControlNet`, así que puedes controlar la profundidad con Krea 2. Es la vía para reproducir una composición o una perspectiva concreta.
+**Cuándo no (tu caso Krea 2).** El fichero `krea2DepthControlnet_v10` / `depth-control-lora.safetensors` **no es un ControlNet clásico**: es un ControlNet-LoRA (latente de depth concatenado + proyección expandida + LoRA). En este acordeón no hace nada útil. Klein y Wan tampoco se controlan por aquí.
 
-**Cuándo no.** No hay nada que puedas usar con Klein 9B ni con Wan 2.2 por esta vía: son arquitecturas distintas y el ControlNet de Krea 2 no vale para ellas. El control de movimiento en Wan va por otros mecanismos, no por este acordeón. Y con un único modelo de depth disponible, no cuentes con canny, pose ni tile para Krea 2.
+**Cuándo sí.** Solo si algún día añades un ControlNet de formato Forge estándar para otro modelo.
 
-**Valores.** Para el ControlNet de depth, empieza con `Control Weight` 0.6–0.8; a 1.0 la guía suele imponerse tanto que el prompt pierde influencia sobre la composición. Deja `Starting Control Step` en 0 y baja `Ending Control Step` a 0.7–0.8 para que los últimos pasos queden libres y el modelo remate el detalle sin la guía encima. Con turbo a 8 pasos, esos porcentajes se traducen en muy pocos pasos, así que los cambios se notan a saltos: no esperes un ajuste fino.
+## Krea 2 Depth / Pose ControlNet-LoRA
+
+Panel dedicado (extensión en `extensions-builtin` de la imagen). Extrae depth con Depth-Anything-V2 (o acepta un mapa ya hecho), codifica el control con el VAE de Krea y aplica el adapter de 862 MB.
+
+**Cuándo sí.** Controlar composición/perspectiva en Krea 2 Turbo o Raw.
+
+**Cuándo no.** Klein, Wan, o cualquier no-Krea2. Depth y Pose no se apilan en el mismo batch.
+
+**Valores.** Strength **1.0** (baja a 0.6–0.8 para más libertad al prompt). Preprocessor `depth_anything_v2` sobre fotos; `None` si ya tienes el mapa (cerca = blanco). Turbo: 8 pasos, CFG 0–1. Modelo en `Models/ControlNet/Krea2/depth-control-lora.safetensors`.
 
 ## MultiDiffusion Integrated
 

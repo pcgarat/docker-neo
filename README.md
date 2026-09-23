@@ -51,7 +51,7 @@ make up       # crea árbol de datos, siembra extensions/ si faltan, y arranca
 make logs     # ver logs; make down para parar
 ```
 
-En máquina limpia, `make up` copia las extensiones **custom** de [`extensions/`](extensions/) a `EXTENSIONS_PATH` **solo si esa carpeta aún no existe** (IIB, zoomimage, Krea2 UI). No toca builtins de la imagen ni sobrescribe installs ya presentes. Para forzar refresh de Krea2 desde GitHub: `make krea2-ext`.
+En máquina limpia, `make up` copia las extensiones **custom** de [`extensions/`](extensions/) a `EXTENSIONS_PATH` **solo si esa carpeta aún no existe** (IIB, zoomimage, Krea2 UI). No toca builtins de la imagen ni sobrescribe installs ya presentes. Para forzar refresh de Krea2 Moodboard/Edit: `make krea2-ext`. El panel **Krea2 Depth/Pose ControlNet-LoRA** va en la imagen (`builtin-extensions/`); actualizar con `make krea2-depth-ext` y `make build`.
 
 Sin Make:
 
@@ -94,10 +94,19 @@ Modelo `inswapper_128.onnx` → `Models/insightface/`; buffalo_l se descarga sol
 La imagen incluye el **backend patch** de [forge-neo-krea2-toolkit](https://github.com/RedNodeAI/forge-neo-krea2-toolkit) (Forge Neo pin + patch regenerado; ver `patches/README.md`). Las extensiones UI van en el volumen: en máquina limpia las siembra `make up` desde [`extensions/`](extensions/). Para **actualizar** forzando clone desde GitHub:
 
 ```bash
-make build      # imagen con el patch (obligatorio la primera vez / tras cambiar el patch)
-make krea2-ext  # sobrescribe Moodboard + Identity Edit en EXTENSIONS_PATH
+make build            # imagen con el patch (obligatorio la primera vez / tras cambiar el patch)
+make krea2-ext        # sobrescribe Moodboard + Identity Edit en EXTENSIONS_PATH
+make krea2-depth-ext  # refresca el vendor Depth/Pose en builtin-extensions/; luego make build
 make restart
 ```
+
+El peso del Depth ControlNet-LoRA (~862 MB) **no** va en la imagen. Colócalo en:
+
+```text
+$DATA_PATH/Models/ControlNet/Krea2/depth-control-lora.safetensors
+```
+
+(mismo fichero que `krea2DepthControlnet_v10.safetensors` / [Patil/Krea-2-depth-controlnet](https://huggingface.co/Patil/Krea-2-depth-controlnet)).
 
 Modelos (en `DATA_PATH`, no van en la imagen):
 

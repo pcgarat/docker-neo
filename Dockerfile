@@ -74,6 +74,10 @@ RUN python -m pip install --no-cache-dir --no-deps 'insightface==1.0.1' \
          python -m pip install --no-cache-dir --force-reinstall --no-deps 'onnxruntime-gpu==1.28.0'; \
        fi
 
+# Krea2 Depth/Pose ControlNet-LoRA: install.py no corre con --skip-install.
+# --no-deps evita que easy-dwpose pinche numpy/huggingface_hub antiguos.
+RUN python -m pip install --no-cache-dir --no-deps 'easy-dwpose==1.0.2'
+
 # Limpieza agresiva para reducir tamaño (RunPod tiene límite de disco para la imagen)
 # No strippear onnxruntime: rompe providers CUDA.
 RUN find /usr/local/lib/python3.13 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true \
@@ -119,6 +123,11 @@ WORKDIR /app/webui
 
 COPY --from=builder /usr/local/lib/python3.13 /usr/local/lib/python3.13
 COPY --from=builder /app/webui /app/webui
+
+# Extensiones custom que deben vivir en la imagen (no en el volumen /data/extensions).
+# Forge las carga desde extensions-builtin además de data/extensions.
+COPY builtin-extensions/sd-forge-krea2-depth-controlnet \
+     /app/webui/extensions-builtin/sd-forge-krea2-depth-controlnet
 
 ENV COMMANDLINE_ARGS="--listen --port 7860 --data-dir /data --gradio-allowed-path /app/webui --gradio-allowed-path /data --enable-insecure-extension-access --skip-prepare-environment --skip-install --api"
 EXPOSE 7860
