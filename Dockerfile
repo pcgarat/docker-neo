@@ -78,14 +78,31 @@ RUN python -m pip install --no-cache-dir --no-deps 'insightface==1.0.1' \
 # --no-deps evita que easy-dwpose pinche numpy/huggingface_hub antiguos.
 RUN python -m pip install --no-cache-dir --no-deps 'easy-dwpose==1.0.2'
 
+# Extensiones Neo en extensions-builtin (install.py no corre con --skip-install).
+# mediapipe ya viene por otras deps; no pinchar 0.10.x encima.
+# Sin boto3/aliyun: Prompt All-in-One los usa solo para traductores AWS/Aliyun;
+# instalar boto3 + el `find …/docs` de abajo dejaba botocore roto y tumba accelerate.
+RUN python -m pip install --no-cache-dir \
+      'ultralytics==8.3.253' \
+      'sqlalchemy' \
+      'ZipUnicode' \
+      'beautifulsoup4' \
+      'pysocks' \
+      'chardet' \
+      'PyExecJS' \
+      'lxml' \
+      'pathos' \
+      'openai' \
+    && python -c "import torch; assert '2.' in torch.__version__, torch.__version__"
+
 # Limpieza agresiva para reducir tamaño (RunPod tiene límite de disco para la imagen)
 # No strippear onnxruntime: rompe providers CUDA.
+# No borrar */botocore/docs: botocore lo necesita si algún día se instala boto3.
 RUN find /usr/local/lib/python3.13 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -name '*.pyc' -delete 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -type d -name tests -exec rm -rf {} + 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -type d -name 'test' -exec rm -rf {} + 2>/dev/null || true \
-    && find /usr/local/lib/python3.13 -type d -name 'docs' -exec rm -rf {} + 2>/dev/null || true \
-    && find /usr/local/lib/python3.13 -type d -name 'doc' -exec rm -rf {} + 2>/dev/null || true \
+    && find /usr/local/lib/python3.13 -type d \( -name 'docs' -o -name 'doc' \) ! -path '*/botocore/*' -exec rm -rf {} + 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -name '*.a' -delete 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -name '*.so' ! -path '*/onnxruntime/*' -exec strip --strip-unneeded {} \; 2>/dev/null || true \
     && rm -rf /usr/local/lib/python3.13/site-packages/torch/share 2>/dev/null || true \
@@ -124,10 +141,9 @@ WORKDIR /app/webui
 COPY --from=builder /usr/local/lib/python3.13 /usr/local/lib/python3.13
 COPY --from=builder /app/webui /app/webui
 
-# Extensiones custom que deben vivir en la imagen (no en el volumen /data/extensions).
-# Forge las carga desde extensions-builtin además de data/extensions.
-COPY builtin-extensions/sd-forge-krea2-depth-controlnet \
-     /app/webui/extensions-builtin/sd-forge-krea2-depth-controlnet
+# Extensiones custom en la imagen (Forge también carga extensions-builtin).
+# El README.md de esta carpeta queda como fichero suelto e inofensivo.
+COPY builtin-extensions/ /app/webui/extensions-builtin/
 
 ENV COMMANDLINE_ARGS="--listen --port 7860 --data-dir /data --gradio-allowed-path /app/webui --gradio-allowed-path /data --enable-insecure-extension-access --skip-prepare-environment --skip-install --api"
 EXPOSE 7860

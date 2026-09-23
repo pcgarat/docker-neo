@@ -8,9 +8,15 @@ sobrevivir a un volumen vacío (RunPod nuevo, `DATA_PATH` limpio) sin pasos manu
 
 | Carpeta | Descripción |
 |---------|-------------|
-| `sd-forge-krea2-depth-controlnet` | Panel Depth/Pose ControlNet-LoRA para Krea 2 ([fabiencomte fork](https://github.com/fabiencomte/Krea-2-controlnet)) |
+| `sd-forge-krea2-depth-controlnet` | Depth/Pose ControlNet-LoRA para Krea 2 |
+| `ADetailer-Neo` | Detección + inpaint de caras/manos ([Haoming02](https://github.com/Haoming02/ADetailer-Neo)) |
+| `sd-webui-state-manager-neo` | Guardar/restaurar configs txt2img/img2img |
+| `sd-civitai-browser-neo` | Browser/organizador de modelos (sustituye Civitai Helper) |
+| `sd-webui-agent-scheduler-neo` | Cola de generaciones |
+| `sd-webui-prompt-all-in-one-neo` | Historial, estilos y traducción de prompts |
+| `forge-neo-lama-cleaner` | Borrado/inpaint de objetos (LaMa) |
 
-**No** metas aquí pesos de modelo (~862 MB): van en `DATA_PATH/Models/…`.
+**No** metas aquí pesos de modelo (YOLO, big-lama, ControlNet-LoRA…): van en `DATA_PATH/Models/…`.
 **No** dupliques la misma carpeta en `extensions/` ni en `EXTENSIONS_PATH` (Forge la cargaría dos veces).
 
-Actualizar desde upstream: `make krea2-depth-ext` y luego `make build`.
+Deps Python se hornean en el Dockerfile (`--skip-install` desactiva cada `install.py`).

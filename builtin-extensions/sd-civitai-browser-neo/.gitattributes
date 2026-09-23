@@ -1,0 +1,38 @@
+# Enforce LF line endings for all text files
+* text=auto eol=lf
+
+# Python
+*.py text eol=lf
+
+# JavaScript / CSS
+*.js text eol=lf
+*.css text eol=lf
+
+# Markdown
+*.md text eol=lf
+
+# JSON
+*.json text eol=lf
+
+# Shell scripts
+*.sh text eol=lf
+
+# Binary files - no line ending conversion
+*.safetensors binary
+*.pt binary
+*.ckpt binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.mp4 binary
+*.webm binary
+
+# Keep development-only files out of release archives.
+# Affects `git archive` and GitHub's "Download ZIP" alike; the files stay in the
+# repository, they just don't ship to someone installing the extension.
+docs/               export-ignore
+tests/              export-ignore
+_mockup_banner.html export-ignore
+.vscode/            export-ignore

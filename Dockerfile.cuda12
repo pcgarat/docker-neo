@@ -66,9 +66,23 @@ RUN python -m pip install --no-cache-dir --no-deps 'insightface==1.0.1' \
 # Krea2 Depth/Pose ControlNet-LoRA: install.py no corre con --skip-install.
 RUN python -m pip install --no-cache-dir --no-deps 'easy-dwpose==1.0.2'
 
+# Extensiones Neo en extensions-builtin (install.py no corre con --skip-install).
+# Sin boto3/aliyun: ver nota en Dockerfile principal (botocore/docs + accelerate).
+RUN python -m pip install --no-cache-dir \
+      'ultralytics==8.3.253' \
+      'sqlalchemy' \
+      'ZipUnicode' \
+      'beautifulsoup4' \
+      'pysocks' \
+      'chardet' \
+      'PyExecJS' \
+      'lxml' \
+      'pathos' \
+      'openai' \
+    && python -c "import torch; assert '2.' in torch.__version__, torch.__version__"
+
 RUN find /usr/local/lib/python3.13 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true \
-    && find /usr/local/lib/python3.13 -type d -name 'docs' -exec rm -rf {} + 2>/dev/null || true \
-    && find /usr/local/lib/python3.13 -type d -name 'doc' -exec rm -rf {} + 2>/dev/null || true \
+    && find /usr/local/lib/python3.13 -type d \( -name 'docs' -o -name 'doc' \) ! -path '*/botocore/*' -exec rm -rf {} + 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -name '*.a' -delete 2>/dev/null || true \
     && find /usr/local/lib/python3.13 -name '*.so' ! -path '*/onnxruntime/*' -exec strip --strip-unneeded {} \; 2>/dev/null || true \
     && rm -rf /usr/local/lib/python3.13/site-packages/torch/share 2>/dev/null || true \
@@ -109,8 +123,7 @@ WORKDIR /app/webui
 COPY --from=builder /usr/local/lib/python3.13 /usr/local/lib/python3.13
 COPY --from=builder /app/webui /app/webui
 
-COPY builtin-extensions/sd-forge-krea2-depth-controlnet \
-     /app/webui/extensions-builtin/sd-forge-krea2-depth-controlnet
+COPY builtin-extensions/ /app/webui/extensions-builtin/
 
 ENV COMMANDLINE_ARGS="--listen --port 7860 --data-dir /data --gradio-allowed-path /app/webui --gradio-allowed-path /data --enable-insecure-extension-access --skip-prepare-environment --skip-install --api"
 EXPOSE 7860

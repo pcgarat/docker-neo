@@ -51,7 +51,8 @@ make up       # crea árbol de datos, siembra extensions/ si faltan, y arranca
 make logs     # ver logs; make down para parar
 ```
 
-En máquina limpia, `make up` copia las extensiones **custom** de [`extensions/`](extensions/) a `EXTENSIONS_PATH` **solo si esa carpeta aún no existe** (IIB, zoomimage, Krea2 UI). No toca builtins de la imagen ni sobrescribe installs ya presentes. Para forzar refresh de Krea2 Moodboard/Edit: `make krea2-ext`. El panel **Krea2 Depth/Pose ControlNet-LoRA** va en la imagen (`builtin-extensions/`); actualizar con `make krea2-depth-ext` y `make build`.
+En máquina limpia, `make up` copia las extensiones **custom** de [`extensions/`](extensions/) a `EXTENSIONS_PATH` **solo si esa carpeta aún no existe** (IIB, zoomimage, Krea2 UI). No toca builtins de la imagen ni sobrescribe installs ya presentes. Para forzar refresh de Krea2 Moodboard/Edit: `make krea2-ext`. Las extensiones Neo de uso diario (ADetailer, State Manager, CivitAI Browser, Agent Scheduler, Prompt All-in-One, Lama Cleaner, Krea2 Depth/Pose) van en la imagen (`builtin-extensions/`); el Depth/Pose se actualiza con `make krea2-depth-ext` + `make build`.
+
 
 Sin Make:
 

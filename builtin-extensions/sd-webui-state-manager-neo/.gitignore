@@ -1,0 +1,17 @@
+.DS_Store
+.vscode
+__pycache__
+history.txt
+v1_data.json
+.idea/
+# ============================================
+# Documentação privada de contexto para IA
+# ============================================
+.github/copilot-instructions.md
+AGENTS.local.md
+docs/PROJECT_LOG.md
+.specstory/
+
+# Internal agent documentation
+AGENTS.md
+

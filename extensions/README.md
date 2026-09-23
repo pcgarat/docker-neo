@@ -15,9 +15,11 @@ El patch de backend Krea2 va en la **imagen** (`patches/`), no aquí.
 
 ## Extensiones en la imagen (`builtin-extensions/`)
 
-Algunas viven en `extensions-builtin` de la imagen (no en este volumen), p. ej.
-**Krea2 Depth/Pose ControlNet-LoRA**. Ver [`builtin-extensions/README.md`](../builtin-extensions/README.md)
-y `make krea2-depth-ext`.
+Viven en `extensions-builtin` de la imagen (no en este volumen). Incluyen Krea2 Depth/Pose,
+ADetailer Neo, State Manager Neo, CivitAI Browser Neo, Agent Scheduler Neo,
+Prompt All-in-One Neo y Lama Cleaner Neo. Ver [`builtin-extensions/README.md`](../builtin-extensions/README.md).
+
+**No** instales Civitai Helper clásico: lo sustituye `sd-civitai-browser-neo` en la imagen.
 
 ## ReActor (no va en la semilla)
 
