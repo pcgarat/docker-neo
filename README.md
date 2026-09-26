@@ -1,29 +1,31 @@
-# forge-neo-docker
+# forge-neo-krea2
 
-Imagen Docker y Compose para [sd-webui-forge-classic](https://github.com/Haoming02/sd-webui-forge-classic) (rama **neo**): WebUI + API en un solo contenedor, pensado para máquina local y RunPod.
+Forge Neo ([sd-webui-forge-classic](https://github.com/Haoming02/sd-webui-forge-classic), rama **neo**) preparado para **Krea 2** y flujos afines: toolkit preinstalado, módulos parchados y dependencias Python actualizadas a versiones recientes (CUDA 13 / Python 3.13).
 
-Registro por defecto: **`ghcr.io/pcgarat/forge-neo`**.
+El contenedor (Compose / RunPod) es solo el vehículo; lo relevante es la stack ya integrada.
 
-## Qué incluye
+Imagen: **`ghcr.io/pcgarat/forge-neo`**.
 
-- Forge Neo pinneado + patches (Krea 2 Moodboard / Identity Edit, fix Qwen3-VL)
-- CUDA **13** / Python **3.13** (variantes CUDA 12 y slim para RunPod)
-- Dependencias opcionales: FFmpeg, xformers, SageAttention, Flash Attention, nunchaku, bitsandbytes, onnxruntime-gpu
-- Extensiones builtin (ADetailer, State Manager, CivitAI Browser, Agent Scheduler, Prompt All-in-One, Lama Cleaner, Krea2 Depth/Pose)
-- Build multi-stage: build con `devel`, imagen final solo `runtime`
-- Árbol de datos único (`forge-data/`) compatible local ↔ RunPod
+## Qué aporta frente a Forge Neo “vanilla”
+
+| Pieza | Detalle |
+|-------|---------|
+| **Krea 2 Moodboard + Identity Edit** | Backend patch de [forge-neo-krea2-toolkit](https://github.com/RedNodeAI/forge-neo-krea2-toolkit) + extensiones UI (siembra en el volumen) |
+| **Krea2 Depth / Pose** | ControlNet-LoRA vendorizado en la imagen (peso del modelo fuera, en el volumen) |
+| **Patches de runtime** | p. ej. fix de atención Qwen3-VL; pin de Forge compatible con los patches |
+| **Deps al día** | Paquetes Python subidos a versiones actuales (xformers, SageAttention, Flash Attention, nunchaku, bitsandbytes, onnxruntime-gpu, insightface…) en lugar de pins rotos de extensiones antiguas |
+| **Extensiones diarias** | ADetailer, State Manager, CivitAI Browser, Agent Scheduler, Prompt All-in-One, Lama Cleaner, etc. |
+| **Perfiles de arranque** | Klein 9B / lowvram / Wan / chatbot con warmup `torch.compile` |
 
 ## Requisitos
 
 | Requisito | Detalle |
 |-----------|---------|
 | Docker + Compose v2 | En Ubuntu/Debian: `make install-docker` |
-| NVIDIA Container Toolkit | GPU visible con `--gpus all` |
-| Driver NVIDIA | Compatible con **CUDA 13** (o usa la variante `:cuda12`) |
-| VRAM | ≥ 12 GB recomendado (Flux / Klein 9B / Krea 2); ≥ 20 GB highvram |
-| Disco / RAM | Varios GB para imagen + modelos; ≥ 16 GB RAM de sistema |
-
-Comprobar GPU:
+| NVIDIA Container Toolkit | GPU con `--gpus all` |
+| Driver NVIDIA | CUDA **13** (o variante `:cuda12` en hosts antiguos) |
+| VRAM | ≥ 12–16 GB para Krea 2 + TE visión; ≥ 20 GB highvram |
+| Disco / RAM | Imagen + modelos; ≥ 16 GB RAM de sistema |
 
 ```bash
 docker run --rm --gpus all nvidia/cuda:13.0.2-base-ubuntu24.04 nvidia-smi
@@ -32,41 +34,55 @@ docker run --rm --gpus all nvidia/cuda:13.0.2-base-ubuntu24.04 nvidia-smi
 ## Arranque rápido
 
 ```bash
-cp .env.example .env          # ajusta PUID/PGID y rutas si hace falta
-make build                    # primera vez (tarda)
-make up                       # crea datos, siembra extensions/ si faltan, arranca
+cp .env.example .env          # PUID/PGID y rutas
+make build
+make up
 ```
 
 - **WebUI:** http://localhost:7860  
 - **API:** http://localhost:7860/docs  
 - **Ayuda:** `make help`
 
-Sin Make:
+## Krea 2 — modelos en el volumen
+
+Los pesos **no** van en la imagen. Colócalos bajo `DATA_PATH`:
+
+| Asset | Carpeta |
+|-------|---------|
+| Checkpoint Krea 2 | `models/Stable-diffusion/` |
+| Text encoder visión (`qwen3vl_4b_bf16` o `fp8_scaled`) | `models/text_encoder/` — [Comfy-Org/Krea-2](https://huggingface.co/Comfy-Org/Krea-2) |
+| LoRA identity edit (strength 1.0) | `models/Lora/` |
+| Depth ControlNet-LoRA (~862 MB) | `Models/ControlNet/Krea2/depth-control-lora.safetensors` |
+
+En la UI: accordions **Krea2 Moodboard** / **Krea2 Identity Edit**.  
+Guía completa: [docs/integracion-krea2-moodboard-identity-edit-forge-neo_23-07-2026.md](docs/integracion-krea2-moodboard-identity-edit-forge-neo_23-07-2026.md).
+
+Actualizar extensiones UI / Depth:
 
 ```bash
-docker compose build
-mkdir -p /workspace/forge-data/{extensions,models,output}
-docker compose up -d
+make krea2-ext          # Moodboard + Identity Edit → volumen
+make krea2-depth-ext    # Depth/Pose en imagen → luego make build
+make restart
 ```
 
 ## Perfiles de VRAM
 
 | Comando | Uso |
 |---------|-----|
-| `make klein9b` | Detecta VRAM y elige high/normal/low + bf16/fp8 |
-| `make lowvram` | Perfil 8 GB fijo |
+| `make klein9b` | Detecta VRAM → high/normal/low + bf16/fp8 |
+| `make lowvram` | Perfil 8 GB |
 | `make wan` | 8 GB + atención INT8 (vídeo / alta res) |
-| `make chatbot` | 8 GB + warmup `torch.compile` para API repetida |
+| `make chatbot` | 8 GB + warmup compile para API repetida |
 
-`EXTRA_ARGS` del `.env` se inyecta en el contenedor; `make klein9b` / `lowvram` / `chatbot` lo pisan.
+`EXTRA_ARGS` del `.env` entra en el contenedor; esos `make` lo pisan.
 
 ## Datos y `.env`
 
-Todo lo mutable vive bajo `DATA_PATH` → `/data` en el contenedor:
+Árbol único `DATA_PATH` → `/data` (local y RunPod iguales):
 
 ```text
 forge-data/
-├── models/          # Stable-diffusion, text_encoder, Lora, ControlNet…
+├── models/
 ├── output/
 ├── extensions/      # custom (IIB, zoomimage, Krea2 UI…)
 ├── config.json
@@ -75,69 +91,58 @@ forge-data/
 
 | Variable | Default | Rol |
 |----------|---------|-----|
-| `PUID` / `PGID` | `1000` | UID/GID del proceso Forge (evita `output/` como root) |
+| `PUID` / `PGID` | `1000` | Usuario del proceso (output no root) |
 | `DATA_PATH` | `/workspace/forge-data` | Montaje → `/data` |
 | `EXTENSIONS_PATH` | `…/extensions` | Extensiones custom |
-| `MODELS_SUBDIR` | `models` | Pon `Models` si tu carpeta lleva mayúscula |
-| `CHECKPOINT_SUBDIR` | `Stable-diffusion` | Pon `StableDiffusion` si aplica |
-| `TEXT_ENCODER_SUBDIR` | `text_encoder` | Idem |
-| `EXTRA_ARGS` | — | Flags extras de arranque |
+| `MODELS_SUBDIR` / `CHECKPOINT_SUBDIR` / `TEXT_ENCODER_SUBDIR` | `models` / `Stable-diffusion` / `text_encoder` | Ajusta si tus carpetas usan otra capitalización |
+| `EXTRA_ARGS` | — | Flags de arranque |
 
-Tras cambiar `.env`: `make restart`.
+Tras cambiar `.env`: `make restart`. Local: `DATA_PATH=./forge-data`.
 
-Local con rutas relativas: `DATA_PATH=./forge-data` y `EXTENSIONS_PATH=./forge-data/extensions`.
-
-## Extensiones y extras
+## Otras extensiones
 
 | Objetivo | Qué hace |
 |----------|----------|
-| `make seed-extensions` | Copia `extensions/` al volumen solo si faltan carpetas |
-| `make iib-access` | `.env` de IIB con acceso a salidas |
-| `make krea2-ext` | Fuerza update Moodboard + Identity Edit |
-| `make krea2-depth-ext` | Refresca Depth/Pose en imagen → luego `make build` |
+| `make seed-extensions` | Copia `extensions/` al volumen si faltan |
+| `make iib-access` | Permisos IIB a carpetas de salida |
 | `make reactor-fix` | Reafirma `onnxruntime-gpu` para ReActor |
 
-**ReActor:** usa [sd-webui-reactor](https://codeberg.org/Gourieff/sd-webui-reactor) (Codeberg), no el fork `sfw` de GitHub (rompe CUDA 13 / Python 3.13 con `--skip-install`).
+**ReActor:** [sd-webui-reactor](https://codeberg.org/Gourieff/sd-webui-reactor) (Codeberg). Evita el fork `sfw` de GitHub: pincha ORT viejo y choca con CUDA 13 / Python 3.13 y `--skip-install`.
 
-**Krea 2:** checkpoint + TE visión en el volumen; Depth ControlNet-LoRA (~862 MB) en  
-`$DATA_PATH/Models/ControlNet/Krea2/depth-control-lora.safetensors`.  
-Guía: [docs/integracion-krea2-moodboard-identity-edit-forge-neo_23-07-2026.md](docs/integracion-krea2-moodboard-identity-edit-forge-neo_23-07-2026.md).
-
-## Publicar imagen y RunPod
+## Publicar y RunPod
 
 ```bash
-docker login ghcr.io -u TU_GITHUB_USER   # PAT con write:packages
-make push                                # → ghcr.io/pcgarat/forge-neo:latest
-make push-cuda12                         # tag :cuda12 (drivers sin CUDA 13)
-make push-slim                           # tag :slim (sin ort-gpu / nunchaku)
+docker login ghcr.io -u TU_GITHUB_USER
+make push            # ghcr.io/pcgarat/forge-neo:latest
+make push-cuda12     # :cuda12
+make push-slim       # :slim (sin ort-gpu / nunchaku)
 ```
 
-En RunPod **no** hay Docker dentro del Pod: esta imagen *es* el contenedor.
+En RunPod la imagen *es* el Pod (sin Docker interno):
 
-1. Container Image: `ghcr.io/pcgarat/forge-neo:latest` (o `:cuda12` / `:slim`)
-2. Volume en `/workspace` → datos en `/workspace/forge-data`
-3. Exponer HTTP **7860**
+1. Image: `ghcr.io/pcgarat/forge-neo:latest` (o `:cuda12` / `:slim`)
+2. Volume → `/workspace` (datos en `/workspace/forge-data`)
+3. HTTP **7860**
 4. Opcional: `EXTRA_ARGS="--cuda-malloc --normalvram --bf16-unet"`
-
-WebUI: `https://[pod-id]-7860.proxy.runpod.net`
 
 | Problema | Solución |
 |----------|----------|
-| `cuda>=13.0` / driver viejo | Imagen `:cuda12` |
-| Imagen demasiado grande | Imagen `:slim` |
-| `JSONDecodeError` en config | Entrypoint rellena `{}`; reconstruye imagen antigua |
+| `cuda>=13.0` | Tag `:cuda12` |
+| Imagen demasiado grande | Tag `:slim` |
+| `JSONDecodeError` en config | Reconstruir imagen con entrypoint actual |
 
 ## Documentación
 
 | Doc | Contenido |
 |-----|-----------|
-| [planteamiento](docs/planteamiento-docker-forge-neo_28-02-2025.md) | Diseño y arquitectura |
-| [Krea 2 Moodboard / Identity Edit](docs/integracion-krea2-moodboard-identity-edit-forge-neo_23-07-2026.md) | Integración del toolkit |
+| [Krea 2 Moodboard / Identity Edit](docs/integracion-krea2-moodboard-identity-edit-forge-neo_23-07-2026.md) | Cómo está integrado el toolkit |
+| [Planteamiento](docs/planteamiento-docker-forge-neo_28-02-2025.md) | Diseño de la imagen |
 | [Scripts txt2img](docs/guia-scripts-txt2img_23-09-2026.md) | Acordeones de scripts |
 | [models.md](models.md) | Layout de modelos |
 | [patches/](patches/) | Patches aplicados en build |
 
-## Licencia y upstream
+## Upstream
 
-Forge Neo: [Haoming02/sd-webui-forge-classic](https://github.com/Haoming02/sd-webui-forge-classic) (rama neo).  
-Este repo empaqueta y opera esa stack; respeta las licencias de Forge, extensiones y modelos que uses.
+Forge: [Haoming02/sd-webui-forge-classic](https://github.com/Haoming02/sd-webui-forge-classic) (neo).  
+Toolkit Krea2: [RedNodeAI/forge-neo-krea2-toolkit](https://github.com/RedNodeAI/forge-neo-krea2-toolkit).  
+Respeta las licencias de Forge, extensiones y modelos que uses.
